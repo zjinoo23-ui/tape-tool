@@ -1,7 +1,7 @@
 // config.js —— 常量、素材清单与默认参数
 // 版本号：后续升级只改这一处
 
-export const VERSION = 'v0.4.0';
+export const VERSION = 'v0.5.0';
 
 // 渲染画布（导出时按内容边缘再裁剪，这里的边距只影响取景）
 export const CANVAS = { w: 1600, h: 1120 };
@@ -39,6 +39,7 @@ export const FOLD_STYLES = {
 // 凸起面通过「投影 + 内高光 + 内阴影」三段画法实现，不需要法线贴图。
 export const BUMP_STYLES = {
   none:          { name: '无',     poly: null },
+  leftHalf:      { name: '左半边', poly: [{ s: 0, v: 0 }, { s: 0.5, v: 0 }, { s: 0.5, v: 1 }, { s: 0, v: 1 }] },
   lowerHalf:     { name: '下半边', poly: [{ s: 0, v: 0.5 }, { s: 1, v: 0.5 }, { s: 1, v: 1 }, { s: 0, v: 1 }] },
   centerLower:   { name: '中下边', poly: [{ s: 0.12, v: 0.25 }, { s: 0.88, v: 0.25 }, { s: 0.88, v: 1 }, { s: 0.12, v: 1 }] },
   bottomPeak:    { name: '底三角', poly: [{ s: 0.5, v: 0.5 }, { s: 0.82, v: 1 }, { s: 0.18, v: 1 }] },
