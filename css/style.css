@@ -542,6 +542,34 @@ button, input {
   outline-offset: 2px;
 }
 
+/* 占位功能：置灰不可点，位置先留着 */
+.chip.is-disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.chip.is-disabled:hover,
+.chip.is-disabled:active {
+  background: var(--panel);
+  box-shadow: none;
+}
+
+.tag-soon {
+  padding: 1px 6px;
+  border: 1px dashed var(--card-edge);
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(38, 38, 31, 0.5);
+}
+
+.group-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(38, 38, 31, 0.55);
+}
+
 /* ===== 滑块 ===== */
 .slider {
   -webkit-appearance: none;
@@ -601,11 +629,6 @@ button, input {
   outline: 2px solid var(--brick);
   outline-offset: 4px;
   border-radius: 4px;
-}
-
-.slider.is-disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 
 /* ===== 按钮 ===== */

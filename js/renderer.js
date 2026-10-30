@@ -39,22 +39,24 @@ export function renderTape(ctx, W, H, params, texture) {
   return tape;
 }
 
-// ---- 投影：整条胶带贴着纸面，边缘柔和 ----
+// ---- 投影：贴纸式阴影，贴着纸面，几乎不外扩 ----
+// 之前的 18px 模糊 + 16px 偏移会让胶带看起来悬在半空，
+// 这里收紧成「近距离接触影」：偏移 2~4px、模糊 8px 以内、透明度更低。
 function drawShadow(ctx, path) {
   if (supportsFilter) {
     ctx.save();
-    ctx.filter = 'blur(18px)';
-    ctx.globalAlpha = 0.24;
+    ctx.filter = 'blur(8px)';
+    ctx.globalAlpha = 0.13;
     ctx.fillStyle = '#2b2318';
-    ctx.translate(8, 16);
+    ctx.translate(3, 4);
     ctx.fill(path);
     ctx.restore();
 
     ctx.save();
-    ctx.filter = 'blur(5px)';
-    ctx.globalAlpha = 0.14;
+    ctx.filter = 'blur(2.5px)';
+    ctx.globalAlpha = 0.12;
     ctx.fillStyle = '#2b2318';
-    ctx.translate(4, 8);
+    ctx.translate(1, 2);
     ctx.fill(path);
     ctx.restore();
     return;
@@ -62,10 +64,10 @@ function drawShadow(ctx, path) {
 
   // 退化方案：多层轻微偏移的实心投影近似模糊
   ctx.save();
-  ctx.fillStyle = 'rgba(43, 35, 24, 0.10)';
+  ctx.fillStyle = 'rgba(43, 35, 24, 0.09)';
   for (let i = 3; i >= 1; i--) {
     ctx.save();
-    ctx.translate(8 + i, 16 + i * 1.5);
+    ctx.translate(1 + i * 0.8, 2 + i * 1.2);
     ctx.fill(path);
     ctx.restore();
   }

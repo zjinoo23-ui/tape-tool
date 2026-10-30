@@ -49,17 +49,12 @@
           <div class="card-body">
             <div class="card-body-inner">
               <div class="control-group">
-                <span class="control-label">长度</span>
-                <div class="segmented-control" data-seg="lengthMode">
-                  <span class="seg-indicator" aria-hidden="true"></span>
-                  <button type="button" class="seg-btn active" data-value="auto">自适应</button>
-                  <button type="button" class="seg-btn" data-value="manual">手动</button>
-                </div>
                 <div class="label-row">
-                  <label class="control-label" for="lengthSlider">手动长度</label>
-                  <span id="lengthValue" class="value-label">80%</span>
+                  <label class="control-label" for="lengthSlider">长度</label>
+                  <span id="lengthValue" class="value-label">9.0 cm</span>
                 </div>
-                <input type="range" id="lengthSlider" class="slider is-disabled" min="30" max="98" value="80" step="1" disabled>
+                <input type="range" id="lengthSlider" class="slider" min="4" max="14" value="9" step="0.5">
+                <p class="group-hint">按现实手帐尺度的示意值，随手剪一截常见 5–10cm</p>
               </div>
 
               <div class="control-group">
@@ -113,20 +108,34 @@
           </div>
         </div>
 
-        <!-- 4. 折痕 -->
+        <!-- 4. 效果：折痕 + 凹凸（凹凸暂留位置） -->
         <div class="paper-card">
           <button type="button" class="card-title" aria-expanded="true">
             <span class="card-sign" aria-hidden="true"></span>
-            折痕
+            效果
           </button>
           <div class="card-body">
             <div class="card-body-inner">
-              <div class="chip-group" data-chip="fold">
-                <button type="button" class="chip" data-value="none">无</button>
-                <button type="button" class="chip active" data-value="one">折一下</button>
-                <button type="button" class="chip" data-value="two">折两下</button>
-                <button type="button" class="chip" data-value="curl">卷边</button>
-                <button type="button" class="chip" data-value="lift">翘起</button>
+              <div class="control-group">
+                <span class="control-label">折痕</span>
+                <div class="chip-group" data-chip="fold">
+                  <button type="button" class="chip" data-value="none">无</button>
+                  <button type="button" class="chip active" data-value="one">折一下</button>
+                  <button type="button" class="chip" data-value="two">折两下</button>
+                  <button type="button" class="chip" data-value="curl">卷边</button>
+                  <button type="button" class="chip" data-value="lift">翘起</button>
+                </div>
+              </div>
+
+              <div class="control-group">
+                <div class="label-row">
+                  <span class="control-label">凹凸</span>
+                  <span class="tag-soon">开发中</span>
+                </div>
+                <div class="chip-group">
+                  <button type="button" class="chip is-disabled" disabled>贴边隆起</button>
+                </div>
+                <p class="group-hint">胶带压过拍立得、卡片的那一段会比压在纸上的部分微微隆起，叠出层次。具体做法还在琢磨，先把位置留在这里。</p>
               </div>
             </div>
           </div>

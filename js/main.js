@@ -1,6 +1,6 @@
 // main.js —— 入口：参数面板接线 + 预览与导出
 
-import { VERSION, CANVAS, WIDTHS, TEXTURES, SEED } from './config.js';
+import { VERSION, CANVAS, PX_PER_CM, LENGTH, WIDTHS, TEXTURES, SEED } from './config.js';
 import { loadTextures, getTextures, getTexture } from './assets.js';
 import { renderTape } from './renderer.js';
 import { cropToContent } from './export.js';
@@ -27,8 +27,7 @@ exportCanvas.height = CANVAS.h;
 
 const state = {
   texture: TEXTURES[0].key,
-  lengthMode: 'auto',
-  lengthPct: 80,
+  lengthCm: LENGTH.value,
   width: 'normal',
   endLeft: 'wave',
   endRight: 'wave',
@@ -98,7 +97,6 @@ document.querySelectorAll('.segmented-control[data-seg]').forEach(container => {
       btn.classList.add('active');
       state[key] = btn.dataset.value;
       syncSegIndicator(container);
-      if (key === 'lengthMode') syncLengthControl();
       scheduleRender();
     });
   });
@@ -125,15 +123,13 @@ function syncSliderFill(el) {
   el.style.setProperty('--fill', pct + '%');
 }
 
-function syncLengthControl() {
-  const manual = state.lengthMode === 'manual';
-  lengthSlider.disabled = !manual;
-  lengthSlider.classList.toggle('is-disabled', !manual);
+function formatLength(cm) {
+  return cm.toFixed(LENGTH.digit) + ' cm';
 }
 
 lengthSlider.addEventListener('input', () => {
-  state.lengthPct = parseInt(lengthSlider.value, 10);
-  lengthValue.textContent = state.lengthPct + '%';
+  state.lengthCm = parseFloat(lengthSlider.value);
+  lengthValue.textContent = formatLength(state.lengthCm);
   syncSliderFill(lengthSlider);
   scheduleRender();
 });
@@ -166,9 +162,7 @@ function render() {
   const texture = getTexture(state.texture);
   if (!texture) return;
 
-  const lengthPx = state.lengthMode === 'auto'
-    ? CANVAS.w * 0.8
-    : CANVAS.w * (state.lengthPct / 100);
+  const lengthPx = state.lengthCm * PX_PER_CM;
 
   renderTape(exportCtx, CANVAS.w, CANVAS.h, {
     lengthPx,
@@ -265,11 +259,14 @@ window.addEventListener('resize', () => {
     return;
   }
   buildTextureGrid();
-  syncLengthControl();
+  lengthSlider.min = String(LENGTH.min);
+  lengthSlider.max = String(LENGTH.max);
+  lengthSlider.step = String(LENGTH.step);
+  lengthSlider.value = String(state.lengthCm);
   document.querySelectorAll('.segmented-control').forEach(syncSegIndicator);
   syncSliderFill(lengthSlider);
   syncSliderFill(tiltSlider);
-  lengthValue.textContent = state.lengthPct + '%';
+  lengthValue.textContent = formatLength(state.lengthCm);
   tiltValue.textContent = state.tilt + '°';
 
   requestAnimationFrame(() => {
