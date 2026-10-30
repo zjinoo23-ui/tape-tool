@@ -21,18 +21,22 @@ export function renderTape(ctx, W, H, params, texture) {
   path.closePath();
 
   drawShadow(ctx, path);
+  drawEndLiftShadow(ctx, tape, path);
 
   ctx.save();
   ctx.clip(path);
   drawMeshTexture(ctx, tape, texture);
+  drawSurfaceShading(ctx, tape);
   drawFoldShading(ctx, tape, params, W, H);
   drawEndShading(ctx, tape, params);
+  drawEndLiftLight(ctx, tape);
   drawBump(ctx, tape, params.bump);
-  drawEdgeLight(ctx, tape);
+  drawEdgeBevel(ctx, path, tape);
   ctx.restore();
 
+  // 外轮廓：只留一丝极淡的线，勒住边缘不脏
   ctx.save();
-  ctx.strokeStyle = 'rgba(43, 35, 24, 0.16)';
+  ctx.strokeStyle = 'rgba(43, 35, 24, 0.09)';
   ctx.lineWidth = 1;
   ctx.stroke(path);
   ctx.restore();
@@ -40,23 +44,21 @@ export function renderTape(ctx, W, H, params, texture) {
   return tape;
 }
 
-// ---- 投影：贴纸式阴影，贴着纸面，几乎不外扩 ----
-// 之前的 18px 模糊 + 16px 偏移会让胶带看起来悬在半空，
-// 这里收紧成「近距离接触影」：偏移 2~4px、模糊 8px 以内、透明度更低。
+// ---- 投影：两层，远影大而淡 + 近影小而实，胶带才是「浮」而不是「印」 ----
 function drawShadow(ctx, path) {
   if (supportsFilter) {
+    // 远影：偏移一点、模糊大、透明度低
     ctx.save();
-    ctx.filter = 'blur(8px)';
-    ctx.globalAlpha = 0.13;
-    ctx.fillStyle = '#2b2318';
-    ctx.translate(3, 4);
+    ctx.filter = 'blur(20px)';
+    ctx.fillStyle = 'rgba(46, 38, 26, 0.15)';
+    ctx.translate(3, 7);
     ctx.fill(path);
     ctx.restore();
 
+    // 接触影：贴着边的一圈近距离暗影
     ctx.save();
-    ctx.filter = 'blur(2.5px)';
-    ctx.globalAlpha = 0.12;
-    ctx.fillStyle = '#2b2318';
+    ctx.filter = 'blur(5px)';
+    ctx.fillStyle = 'rgba(46, 38, 26, 0.15)';
     ctx.translate(1, 2);
     ctx.fill(path);
     ctx.restore();
@@ -72,6 +74,116 @@ function drawShadow(ctx, path) {
     ctx.fill(path);
     ctx.restore();
   }
+  ctx.restore();
+}
+
+// ---- 端头微翘：翘起处离纸更远，影子更浓、更偏外 ----
+function drawEndLiftShadow(ctx, tape, path) {
+  if (!supportsFilter) return;
+
+  const cols = tape.cols;
+  const ends = [
+    { col: cols[0], dir: -1 },
+    { col: cols[cols.length - 1], dir: 1 },
+  ];
+  const W = ctx.canvas.width;
+  const H = ctx.canvas.height;
+
+  // 画布减去胶带本身：影子只落在胶带之外
+  const outside = new Path2D();
+  outside.rect(0, 0, W, H);
+  const o = tape.outline;
+  outside.moveTo(o[0].x, o[0].y);
+  for (let i = 1; i < o.length; i++) outside.lineTo(o[i].x, o[i].y);
+  outside.closePath();
+
+  for (const e of ends) {
+    ctx.save();
+    ctx.clip(outside, 'evenodd');
+    // 只在端头附近生效
+    ctx.beginPath();
+    ctx.arc(e.col.c.x, e.col.c.y, tape.widthPx * 1.5, 0, Math.PI * 2);
+    ctx.clip();
+
+    ctx.filter = 'blur(9px)';
+    ctx.fillStyle = 'rgba(42, 34, 23, 0.32)';
+    ctx.translate(e.dir * 3, 8);
+    ctx.fill(path);
+    ctx.restore();
+  }
+}
+
+// ---- 表面光影：统一光源在左上，横截面亮上暗下，像一条卷起来的纸带 ----
+function drawSurfaceShading(ctx, tape) {
+  const mid = tape.cols[Math.floor(tape.cols.length / 2)] || tape.cols[0];
+  const g = ctx.createLinearGradient(mid.top.x, mid.top.y, mid.bot.x, mid.bot.y);
+  g.addColorStop(0, 'rgba(255, 255, 255, 0.20)');
+  g.addColorStop(0.16, 'rgba(255, 255, 255, 0.07)');
+  g.addColorStop(0.5, 'rgba(255, 255, 255, 0)');
+  g.addColorStop(0.86, 'rgba(38, 30, 18, 0.06)');
+  g.addColorStop(1, 'rgba(38, 30, 18, 0.18)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+}
+
+// ---- 端头微翘：翘起的地方迎光，端边一道细高光 ----
+function drawEndLiftLight(ctx, tape) {
+  const cols = tape.cols;
+
+  for (const col of [cols[0], cols[cols.length - 1]]) {
+    // 端边高光
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.34)';
+    ctx.lineWidth = Math.max(1, tape.widthPx * 0.012);
+    ctx.beginPath();
+    ctx.moveTo(col.top.x, col.top.y);
+    ctx.lineTo(col.bot.x, col.bot.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 端头 ~6% 内提亮，越靠端头越亮
+  for (const side of [-1, 1]) {
+    const from = side < 0 ? cols[0] : cols[cols.length - 1];
+    const to = cols.find(c => Math.abs(c.s - from.s) >= tape.total * 0.06) || from;
+    const g = ctx.createLinearGradient(from.top.x + (from.bot.x - from.top.x) * 0.5, from.top.y + (from.bot.y - from.top.y) * 0.5,
+      to.top.x + (to.bot.x - to.top.x) * 0.5, to.top.y + (to.bot.y - to.top.y) * 0.5);
+    g.addColorStop(0, 'rgba(255, 255, 255, 0.14)');
+    g.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  }
+}
+
+// ---- 边缘厚度：下缘一道暗边当纸厚，上缘一道浅高光，不是刀切的硬边 ----
+function drawEdgeBevel(ctx, path, tape) {
+  if (supportsFilter) {
+    ctx.save();
+    ctx.clip(path);
+    ctx.filter = 'blur(1.6px)';
+
+    ctx.save();
+    ctx.translate(0.6, 1.9);
+    ctx.strokeStyle = 'rgba(52, 40, 26, 0.30)';
+    ctx.lineWidth = Math.max(2, tape.widthPx * 0.028);
+    ctx.stroke(path);
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(-0.5, -1.3);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.30)';
+    ctx.lineWidth = Math.max(1.6, tape.widthPx * 0.022);
+    ctx.stroke(path);
+    ctx.restore();
+
+    ctx.restore();
+    return;
+  }
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(43, 35, 24, 0.16)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke(path);
   ctx.restore();
 }
 
@@ -257,26 +369,6 @@ function drawEndShading(ctx, tape, params) {
   ctx.moveTo(end.top.x, end.top.y);
   ctx.lineTo(end.bot.x, end.bot.y);
   ctx.stroke();
-  ctx.restore();
-}
-
-// ---- 上边高光、下边暗线：一条胶带卷起来的立体感 ----
-function drawEdgeLight(ctx, tape) {
-  ctx.save();
-  ctx.lineWidth = 1.2;
-
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.26)';
-  ctx.beginPath();
-  ctx.moveTo(tape.top[0].x, tape.top[0].y);
-  for (let i = 1; i < tape.top.length; i++) ctx.lineTo(tape.top[i].x, tape.top[i].y);
-  ctx.stroke();
-
-  ctx.strokeStyle = 'rgba(43, 35, 24, 0.14)';
-  ctx.beginPath();
-  ctx.moveTo(tape.bot[0].x, tape.bot[0].y);
-  for (let i = 1; i < tape.bot.length; i++) ctx.lineTo(tape.bot[i].x, tape.bot[i].y);
-  ctx.stroke();
-
   ctx.restore();
 }
 
