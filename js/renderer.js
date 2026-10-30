@@ -313,25 +313,50 @@ function pointAt(tape, sFrac, vFrac) {
 // 凸起不是硬纸板，光影要柔：落影用大模糊、低透明度的柔和投影，
 // 边缘受光/背光用模糊描边（而不是硬边带），整体只提亮一点点。
 // 光源方向：左上（与胶带自身的上下边高光方向一致）。
-function buildBumpPoly(bump, tape) {
-  if (bump.kind !== 'corner') return bump.poly;
 
-  const { s: s0, v: v0 } = bump.apex;
-  // 直角在像素上成立：横向 1 个单位 v 对应 widthPx，纵向 1 个单位 s 对应 total
-  const k = (tape.widthPx / tape.total) * Math.tan((bump.aperture * Math.PI) / 180 / 2);
-  const dv = 3; // 两条边伸出胶带之外，实际形状由胶带轮廓裁出
-  return [
-    { s: s0, v: v0 },
-    { s: s0 - k * dv, v: v0 + dv },
-    { s: s0 + k * dv, v: v0 + dv },
-  ];
+// 角的形状沿胶带参数空间生成（s 沿长度、v 横跨），两条边按「屏幕像素上 45°」的
+// 斜率逐步推进：每一步都用当下的 1 个单位 v 折算成多少单位 s（localK），
+// 所以顶点在屏幕上确实是 90°，折弯处也能跟着胶带走。
+function localK(tape, s) {
+  const p = Math.max(0.01, Math.min(0.99, s));
+  const a = colAt(tape, (p - 0.01) * tape.total);
+  const b = colAt(tape, (p + 0.01) * tape.total);
+  const su = Math.hypot(
+    (b.top.x + b.bot.x - a.top.x - a.bot.x) / 2,
+    (b.top.y + b.bot.y - a.top.y - a.bot.y) / 2,
+  ) / 0.02;
+  const f = colAt(tape, p * tape.total);
+  const vu = Math.hypot(f.bot.x - f.top.x, f.bot.y - f.top.y);
+  return su > 0.001 ? vu / su : 0;
+}
+
+function bumpPoints(tape, bump) {
+  if (bump.kind !== 'corner') {
+    if (!bump.poly) return [];
+    return bump.poly.map(p => pointAt(tape, p.s, p.v));
+  }
+
+  const STEPS = 12;
+  const dv = 3 / STEPS;
+  const legs = [[], []];
+  for (let side = 0; side < 2; side++) {
+    let s = bump.apex.s;
+    let v = bump.apex.v;
+    for (let i = 0; i < STEPS; i++) {
+      s += (side ? 1 : -1) * localK(tape, s) * dv;
+      v += dv;
+      legs[side].push({ s, v });
+    }
+  }
+  const poly = [{ s: bump.apex.s, v: bump.apex.v }, ...legs[0], ...legs[1].reverse()];
+  return poly.map(p => pointAt(tape, p.s, p.v));
 }
 
 function drawBump(ctx, tape, bump) {
-  const poly = bump && buildBumpPoly(bump, tape);
-  if (!poly || poly.length < 3) return;
+  if (!bump) return;
+  const pts = bumpPoints(tape, bump);
+  if (!pts || pts.length < 3) return;
 
-  const pts = poly.map(p => pointAt(tape, p.s, p.v));
   const raised = new Path2D();
   raised.moveTo(pts[0].x, pts[0].y);
   for (let i = 1; i < pts.length; i++) raised.lineTo(pts[i].x, pts[i].y);

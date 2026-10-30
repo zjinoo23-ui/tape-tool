@@ -45,9 +45,9 @@ export const BUMP_STYLES = {
   lowerHalf:   { name: '下半边', poly: [{ s: 0, v: 0.5 }, { s: 1, v: 0.5 }, { s: 1, v: 1 }, { s: 0, v: 1 }] },
   centerLower: { name: '中下边', poly: [{ s: 0.12, v: 0.25 }, { s: 0.88, v: 0.25 }, { s: 0.88, v: 1.3 }, { s: 0.12, v: 1.3 }] },
   // 角尖在胶带内，被胶带完全盖住，两条直角边伸出下边缘
-  bottomPeak:  { name: '底三角', kind: 'corner', apex: { s: 0.5, v: 0.30 }, aperture: 90 },
+  bottomPeak:  { name: '底三角', kind: 'corner', apex: { s: 0.5, v: 0.30 } },
   // 角尖已经跑到上边缘之外，胶带里只剩被裁掉尖头的一块宽梯形
-  centerLeak:  { name: '中心',   kind: 'corner', apex: { s: 0.5, v: -0.30 }, aperture: 90 },
+  cornerOut:   { name: '露角',   kind: 'corner', apex: { s: 0.5, v: -0.30 } },
 };
 
 // 纹理素材清单：文件放在 assets/textures/ 下，按 key.png 命名。
