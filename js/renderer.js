@@ -310,34 +310,36 @@ function pointAt(tape, sFrac, vFrac) {
 }
 
 // ---- 凹凸光影：纯代码模拟凸起，无需法线贴图 ----
-// 思路：凸起多边形 = 顶面。用三段画法骗出立体感：
-//   1) 投影：把凸起多边形沿「光的反方向」平移，画在凸起之外的平面上 → 落影
-//   2) 内高光：凸起面整体提亮，左上边缘再叠亮 → 顶面受光
-//   3) 内阴影：右下边缘叠暗 → 立壁背光
+// 凸起不是硬纸板，光影要柔：落影用大模糊、低透明度的柔和投影，
+// 边缘受光/背光用模糊描边（而不是硬边带），整体只提亮一点点。
 // 光源方向：左上（与胶带自身的上下边高光方向一致）。
-function drawBump(ctx, tape, bump) {
-  if (!bump || !bump.poly || bump.poly.length < 3) return;
+function buildBumpPoly(bump, tape) {
+  if (bump.kind !== 'corner') return bump.poly;
 
-  const pts = bump.poly.map(p => pointAt(tape, p.s, p.v));
+  const { s: s0, v: v0 } = bump.apex;
+  // 直角在像素上成立：横向 1 个单位 v 对应 widthPx，纵向 1 个单位 s 对应 total
+  const k = (tape.widthPx / tape.total) * Math.tan((bump.aperture * Math.PI) / 180 / 2);
+  const dv = 3; // 两条边伸出胶带之外，实际形状由胶带轮廓裁出
+  return [
+    { s: s0, v: v0 },
+    { s: s0 - k * dv, v: v0 + dv },
+    { s: s0 + k * dv, v: v0 + dv },
+  ];
+}
+
+function drawBump(ctx, tape, bump) {
+  const poly = bump && buildBumpPoly(bump, tape);
+  if (!poly || poly.length < 3) return;
+
+  const pts = poly.map(p => pointAt(tape, p.s, p.v));
   const raised = new Path2D();
   raised.moveTo(pts[0].x, pts[0].y);
   for (let i = 1; i < pts.length; i++) raised.lineTo(pts[i].x, pts[i].y);
   raised.closePath();
 
-  const outline = tape.outline;
-  const off = 4;
-
-  // 把路径整体平移 dx/dy，用来做边缘差集
-  function translatedPath(p, dx, dy) {
-    const out = new Path2D();
-    out.addPath(p, new DOMMatrix([1, 0, 0, 1, dx, dy]));
-    return out;
-  }
-
-  // 1) 投影：凸起在平面上的落影（只出现在凸起之外）
-  //    用 evenodd 把凸起多边形从胶带轮廓里抠掉，再给凸起加右下投影，
-  //    凸起本身被 clip 掉，只有影子落到平面上。
+  // 1) 落影：只落在凸起之外的平面上，柔和大模糊
   ctx.save();
+  const outline = tape.outline;
   const tapeWithHole = new Path2D();
   tapeWithHole.moveTo(outline[0].x, outline[0].y);
   for (let i = 1; i < outline.length; i++) tapeWithHole.lineTo(outline[i].x, outline[i].y);
@@ -345,40 +347,59 @@ function drawBump(ctx, tape, bump) {
   tapeWithHole.addPath(raised);
   ctx.clip(tapeWithHole, 'evenodd');
 
-  ctx.shadowColor = 'rgba(40, 32, 22, 0.55)';
-  ctx.shadowBlur = 10;
-  ctx.shadowOffsetX = 5;
-  ctx.shadowOffsetY = 5;
-  ctx.fillStyle = '#000';
-  ctx.fill(raised);
+  if (supportsFilter) {
+    ctx.filter = 'blur(10px)';
+    ctx.fillStyle = 'rgba(42, 34, 23, 0.28)';
+    ctx.translate(3, 4);
+    ctx.fill(raised);
+    ctx.filter = 'none';
+  } else {
+    ctx.shadowColor = 'rgba(42, 34, 23, 0.34)';
+    ctx.shadowBlur = 9;
+    ctx.shadowOffsetX = 3;
+    ctx.shadowOffsetY = 4;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.001)';
+    ctx.fill(raised);
+    ctx.shadowColor = 'transparent';
+  }
   ctx.restore();
 
-  // 2) 凸起面整体提亮 + 边缘高光/阴影
+  // 2) 凸起面：沿光向的柔和明暗渐变，边缘再柔化一下
   ctx.save();
   ctx.clip(raised);
 
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.10)';
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of pts) {
+    if (p.x < x0) x0 = p.x;
+    if (p.y < y0) y0 = p.y;
+    if (p.x > x1) x1 = p.x;
+    if (p.y > y1) y1 = p.y;
+  }
+
+  // 凸起面整体提亮：高出来的平面离光源更近
+  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  g.addColorStop(0, 'rgba(255, 255, 255, 0.26)');
+  g.addColorStop(0.45, 'rgba(255, 255, 255, 0.20)');
+  g.addColorStop(1, 'rgba(255, 255, 255, 0.13)');
+  ctx.fillStyle = g;
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
-  // 左上内高光：凸起外轮廓 减去 向右下偏移后的凸起 = 左上边缘带
-  const hlRim = new Path2D();
-  hlRim.addPath(raised);
-  hlRim.addPath(translatedPath(raised, off, off));
-  ctx.shadowColor = 'rgba(255, 255, 255, 0.45)';
-  ctx.shadowBlur = 6;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 0;
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-  ctx.fill(hlRim, 'evenodd');
-
-  // 右下内阴影：凸起外轮廓 减去 向左上偏移后的凸起 = 右下边缘带
-  const shRim = new Path2D();
-  shRim.addPath(raised);
-  shRim.addPath(translatedPath(raised, -off, -off));
-  ctx.shadowColor = 'rgba(40, 32, 22, 0.5)';
-  ctx.shadowBlur = 6;
-  ctx.fillStyle = 'rgba(40, 32, 22, 0.45)';
-  ctx.fill(shRim, 'evenodd');
+  // 迎光侧一道绒边：台阶顶部折起来的那道高光，模糊成过渡而不是硬线
+  const lw = Math.max(5, tape.widthPx * 0.14);
+  if (supportsFilter) {
+    ctx.filter = 'blur(7px)';
+    ctx.save();
+    ctx.translate(-2, -2);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.32)';
+    ctx.lineWidth = lw;
+    ctx.stroke(raised);
+    ctx.restore();
+    ctx.filter = 'none';
+  } else {
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.lineWidth = lw * 1.3;
+    ctx.stroke(raised);
+  }
 
   ctx.restore();
 }

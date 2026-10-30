@@ -1,7 +1,7 @@
 // config.js —— 常量、素材清单与默认参数
 // 版本号：后续升级只改这一处
 
-export const VERSION = 'v0.5.0';
+export const VERSION = 'v0.6.0';
 
 // 渲染画布（导出时按内容边缘再裁剪，这里的边距只影响取景）
 export const CANVAS = { w: 1600, h: 1120 };
@@ -34,16 +34,20 @@ export const FOLD_STYLES = {
   lift: '翘起',
 };
 
-// 凹凸：胶带局部隆起的预设形状。
-// poly 用 (s, v) 描述，s 为沿胶带长度方向的弧长比例 [0,1]，v 为宽度方向比例 [0=上边,1=下边]。
-// 凸起面通过「投影 + 内高光 + 内阴影」三段画法实现，不需要法线贴图。
+// 凹凸：胶带局部隆起的预设形状，模拟胶带压在纸上的别的东西（拍立得、卡片）上。
+// poly 用 (s, v) 描述，s 为沿胶带长度方向的弧长比例，v 为宽度方向比例 [0=上边,1=下边]，
+// 超出 0~1 的部分会被胶带轮廓裁掉。
+// kind='corner' 表示「胶带盖住一个角」：apex 是角尖位置，两条边固定 90° 张开，
+// 像素比例按胶带宽度/长度换算，所以屏幕上看到的确实是直角。
 export const BUMP_STYLES = {
-  none:          { name: '无',     poly: null },
-  leftHalf:      { name: '左半边', poly: [{ s: 0, v: 0 }, { s: 0.5, v: 0 }, { s: 0.5, v: 1 }, { s: 0, v: 1 }] },
-  lowerHalf:     { name: '下半边', poly: [{ s: 0, v: 0.5 }, { s: 1, v: 0.5 }, { s: 1, v: 1 }, { s: 0, v: 1 }] },
-  centerLower:   { name: '中下边', poly: [{ s: 0.12, v: 0.25 }, { s: 0.88, v: 0.25 }, { s: 0.88, v: 1 }, { s: 0.12, v: 1 }] },
-  bottomPeak:    { name: '底三角', poly: [{ s: 0.5, v: 0.5 }, { s: 0.82, v: 1 }, { s: 0.18, v: 1 }] },
-  centerDiamond: { name: '中心',   poly: [{ s: 0.5, v: 0.28 }, { s: 0.86, v: 0.5 }, { s: 0.5, v: 0.72 }, { s: 0.14, v: 0.5 }] },
+  none:        { name: '无',     poly: null },
+  leftHalf:    { name: '左半边', poly: [{ s: 0, v: 0 }, { s: 0.5, v: 0 }, { s: 0.5, v: 1 }, { s: 0, v: 1 }] },
+  lowerHalf:   { name: '下半边', poly: [{ s: 0, v: 0.5 }, { s: 1, v: 0.5 }, { s: 1, v: 1 }, { s: 0, v: 1 }] },
+  centerLower: { name: '中下边', poly: [{ s: 0.12, v: 0.25 }, { s: 0.88, v: 0.25 }, { s: 0.88, v: 1.3 }, { s: 0.12, v: 1.3 }] },
+  // 角尖在胶带内，被胶带完全盖住，两条直角边伸出下边缘
+  bottomPeak:  { name: '底三角', kind: 'corner', apex: { s: 0.5, v: 0.30 }, aperture: 90 },
+  // 角尖已经跑到上边缘之外，胶带里只剩被裁掉尖头的一块宽梯形
+  centerLeak:  { name: '中心',   kind: 'corner', apex: { s: 0.5, v: -0.30 }, aperture: 90 },
 };
 
 // 纹理素材清单：文件放在 assets/textures/ 下，按 key.png 命名。
