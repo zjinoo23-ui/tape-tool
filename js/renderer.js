@@ -27,6 +27,7 @@ export function renderTape(ctx, W, H, params, texture) {
   drawMeshTexture(ctx, tape, texture);
   drawFoldShading(ctx, tape, params, W, H);
   drawEndShading(ctx, tape, params);
+  drawBump(ctx, tape, params.bump);
   drawEdgeLight(ctx, tape);
   ctx.restore();
 
@@ -275,6 +276,109 @@ function drawEdgeLight(ctx, tape) {
   ctx.moveTo(tape.bot[0].x, tape.bot[0].y);
   for (let i = 1; i < tape.bot.length; i++) ctx.lineTo(tape.bot[i].x, tape.bot[i].y);
   ctx.stroke();
+
+  ctx.restore();
+}
+
+// ---- 凹凸：把 (s, v) 比例转成画布坐标 ----
+// s 是弧长比例 [0,1]，v 是宽度方向比例 [0=上边,1=下边]。
+function colAt(tape, s) {
+  const cols = tape.cols;
+  if (s <= cols[0].s) return { top: cols[0].top, bot: cols[0].bot };
+  const last = cols[cols.length - 1];
+  if (s >= last.s) return { top: last.top, bot: last.bot };
+
+  let lo = 0, hi = cols.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (cols[mid].s <= s) lo = mid; else hi = mid;
+  }
+  const a = cols[lo], b = cols[hi];
+  const f = b.s > a.s ? (s - a.s) / (b.s - a.s) : 0;
+  return {
+    top: { x: a.top.x + (b.top.x - a.top.x) * f, y: a.top.y + (b.top.y - a.top.y) * f },
+    bot: { x: a.bot.x + (b.bot.x - a.bot.x) * f, y: a.bot.y + (b.bot.y - a.bot.y) * f },
+  };
+}
+
+function pointAt(tape, sFrac, vFrac) {
+  const { top, bot } = colAt(tape, sFrac * tape.total);
+  return {
+    x: top.x + (bot.x - top.x) * vFrac,
+    y: top.y + (bot.y - top.y) * vFrac,
+  };
+}
+
+// ---- 凹凸光影：纯代码模拟凸起，无需法线贴图 ----
+// 思路：凸起多边形 = 顶面。用三段画法骗出立体感：
+//   1) 投影：把凸起多边形沿「光的反方向」平移，画在凸起之外的平面上 → 落影
+//   2) 内高光：凸起面整体提亮，左上边缘再叠亮 → 顶面受光
+//   3) 内阴影：右下边缘叠暗 → 立壁背光
+// 光源方向：左上（与胶带自身的上下边高光方向一致）。
+function drawBump(ctx, tape, bump) {
+  if (!bump || !bump.poly || bump.poly.length < 3) return;
+
+  const pts = bump.poly.map(p => pointAt(tape, p.s, p.v));
+  const raised = new Path2D();
+  raised.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) raised.lineTo(pts[i].x, pts[i].y);
+  raised.closePath();
+
+  const outline = tape.outline;
+  const off = 4;
+
+  // 把路径整体平移 dx/dy，用来做边缘差集
+  function translatedPath(p, dx, dy) {
+    const out = new Path2D();
+    out.addPath(p, new DOMMatrix([1, 0, 0, 1, dx, dy]));
+    return out;
+  }
+
+  // 1) 投影：凸起在平面上的落影（只出现在凸起之外）
+  //    用 evenodd 把凸起多边形从胶带轮廓里抠掉，再给凸起加右下投影，
+  //    凸起本身被 clip 掉，只有影子落到平面上。
+  ctx.save();
+  const tapeWithHole = new Path2D();
+  tapeWithHole.moveTo(outline[0].x, outline[0].y);
+  for (let i = 1; i < outline.length; i++) tapeWithHole.lineTo(outline[i].x, outline[i].y);
+  tapeWithHole.closePath();
+  tapeWithHole.addPath(raised);
+  ctx.clip(tapeWithHole, 'evenodd');
+
+  ctx.shadowColor = 'rgba(40, 32, 22, 0.55)';
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetX = 5;
+  ctx.shadowOffsetY = 5;
+  ctx.fillStyle = '#000';
+  ctx.fill(raised);
+  ctx.restore();
+
+  // 2) 凸起面整体提亮 + 边缘高光/阴影
+  ctx.save();
+  ctx.clip(raised);
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.10)';
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+  // 左上内高光：凸起外轮廓 减去 向右下偏移后的凸起 = 左上边缘带
+  const hlRim = new Path2D();
+  hlRim.addPath(raised);
+  hlRim.addPath(translatedPath(raised, off, off));
+  ctx.shadowColor = 'rgba(255, 255, 255, 0.45)';
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+  ctx.fill(hlRim, 'evenodd');
+
+  // 右下内阴影：凸起外轮廓 减去 向左上偏移后的凸起 = 右下边缘带
+  const shRim = new Path2D();
+  shRim.addPath(raised);
+  shRim.addPath(translatedPath(raised, -off, -off));
+  ctx.shadowColor = 'rgba(40, 32, 22, 0.5)';
+  ctx.shadowBlur = 6;
+  ctx.fillStyle = 'rgba(40, 32, 22, 0.45)';
+  ctx.fill(shRim, 'evenodd');
 
   ctx.restore();
 }

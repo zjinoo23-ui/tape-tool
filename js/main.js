@@ -1,6 +1,6 @@
 // main.js —— 入口：参数面板接线 + 预览与导出
 
-import { VERSION, CANVAS, PX_PER_CM, LENGTH, WIDTHS, TEXTURES, SEED } from './config.js';
+import { VERSION, CANVAS, PX_PER_CM, LENGTH, WIDTHS, TEXTURES, SEED, BUMP_STYLES } from './config.js';
 import { loadTextures, getTextures, getTexture } from './assets.js';
 import { renderTape } from './renderer.js';
 import { cropToContent } from './export.js';
@@ -30,6 +30,7 @@ const state = {
   endLeft: 'wave',
   endRight: 'wave',
   fold: 'one',
+  bump: 'none',
 };
 
 let renderTimeout = null;
@@ -161,6 +162,7 @@ function render() {
     endLeft: state.endLeft,
     endRight: state.endRight,
     tiltDeg: 0, // 倾斜角功能已移除，胶带保持水平
+    bump: BUMP_STYLES[state.bump],
     seed: SEED,
   }, texture);
 
