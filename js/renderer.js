@@ -148,10 +148,26 @@ function drawEndLiftLight(ctx, tape) {
     const to = cols.find(c => Math.abs(c.s - from.s) >= tape.total * 0.06) || from;
     const g = ctx.createLinearGradient(from.top.x + (from.bot.x - from.top.x) * 0.5, from.top.y + (from.bot.y - from.top.y) * 0.5,
       to.top.x + (to.bot.x - to.top.x) * 0.5, to.top.y + (to.bot.y - to.top.y) * 0.5);
-    g.addColorStop(0, 'rgba(255, 255, 255, 0.14)');
+    g.addColorStop(0, 'rgba(255, 255, 255, 0.20)');
     g.addColorStop(1, 'rgba(255, 255, 255, 0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  }
+
+  // 起翘折痕：离端头 8% 处一道很淡的暗线，交代「这里开始离开纸面」
+  for (const side of [-1, 1]) {
+    const target = side < 0 ? tape.total * 0.08 : tape.total * 0.92;
+    let col = cols[0];
+    for (const c of cols) if (Math.abs(c.s - target) < Math.abs(col.s - target)) col = c;
+    ctx.save();
+    if (supportsFilter) ctx.filter = 'blur(4px)';
+    ctx.strokeStyle = 'rgba(38, 30, 18, 0.16)';
+    ctx.lineWidth = Math.max(2, tape.widthPx * 0.05);
+    ctx.beginPath();
+    ctx.moveTo(col.top.x, col.top.y);
+    ctx.lineTo(col.bot.x, col.bot.y);
+    ctx.stroke();
+    ctx.restore();
   }
 }
 
