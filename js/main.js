@@ -12,8 +12,6 @@ const exportCtx = exportCanvas.getContext('2d');
 const textureGrid = document.getElementById('textureGrid');
 const lengthSlider = document.getElementById('lengthSlider');
 const lengthValue = document.getElementById('lengthValue');
-const tiltSlider = document.getElementById('tiltSlider');
-const tiltValue = document.getElementById('tiltValue');
 const downloadBtn = document.getElementById('downloadBtn');
 const appVersion = document.getElementById('appVersion');
 const saveModal = document.getElementById('saveModal');
@@ -32,7 +30,6 @@ const state = {
   endLeft: 'wave',
   endRight: 'wave',
   fold: 'one',
-  tilt: 3,
 };
 
 let renderTimeout = null;
@@ -134,13 +131,6 @@ lengthSlider.addEventListener('input', () => {
   scheduleRender();
 });
 
-tiltSlider.addEventListener('input', () => {
-  state.tilt = parseFloat(tiltSlider.value);
-  tiltValue.textContent = state.tilt + '°';
-  syncSliderFill(tiltSlider);
-  scheduleRender();
-});
-
 // ---- 纸片卡折叠 ----
 document.querySelectorAll('.card-title').forEach(btn => {
   const card = btn.closest('.paper-card');
@@ -170,7 +160,7 @@ function render() {
     foldStyle: state.fold,
     endLeft: state.endLeft,
     endRight: state.endRight,
-    tiltDeg: state.tilt,
+    tiltDeg: 0, // 倾斜角功能已移除，胶带保持水平
     seed: SEED,
   }, texture);
 
@@ -265,9 +255,7 @@ window.addEventListener('resize', () => {
   lengthSlider.value = String(state.lengthCm);
   document.querySelectorAll('.segmented-control').forEach(syncSegIndicator);
   syncSliderFill(lengthSlider);
-  syncSliderFill(tiltSlider);
   lengthValue.textContent = formatLength(state.lengthCm);
-  tiltValue.textContent = state.tilt + '°';
 
   requestAnimationFrame(() => {
     document.querySelectorAll('.segmented-control').forEach(syncSegIndicator);

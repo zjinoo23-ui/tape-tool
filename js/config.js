@@ -1,7 +1,7 @@
 // config.js —— 常量、素材清单与默认参数
 // 版本号：后续升级只改这一处
 
-export const VERSION = 'v0.2.0';
+export const VERSION = 'v0.3.0';
 
 // 渲染画布（导出时按内容边缘再裁剪，这里的边距只影响取景）
 export const CANVAS = { w: 1600, h: 1120 };
