@@ -33,13 +33,11 @@ export const FOLD_STYLES = {
   skew: '单斜翘',
 };
 
-// 折痕素材：透明底长条 PNG（2000×300，tools/bake-crumple.html 生成，后续可换正式素材）
-// 轻皱 1 张；揉皱 2 张随机轮换。运行时随机取横向切片，不拉伸不平铺。
+// 折痕素材：白底 AO 明暗 PNG（multiply 叠加），轻皱 1 张；揉皱数组内可多张随机轮换
 export const FOLD_TEXTURES = {
   light: 'assets/folds/crease_light.png',
   crumple: [
     'assets/folds/crease_crumple.png',
-    'assets/folds/crease_crumple_2.png',
   ],
 };
 

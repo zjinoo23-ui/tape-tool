@@ -27,18 +27,25 @@ export function mulberry32(seed) {
   };
 }
 
-// ---- 素材叠加：按胶带宽度等比缩放，随机取横向切片位置，画在胶带矩形区域内 ----
+// ---- 素材叠加：等比缩放（宽度对齐带宽，胶带更长时按长度对齐并垂直居中裁剪），
+// 随机取横向切片位置，不拉伸不平铺。
+// 素材是白底 AO 明暗图，用 multiply 叠：白色不变、折痕暗部压到纸纹上。
 function drawSlice(ctx, tape, img, rng) {
   const n = tape.top.length - 1;
   const x0 = tape.top[0].x;
   const x1 = tape.top[n].x;
   const y0 = tape.top[0].y;
+  const y1 = tape.bot[n].y;
   const tapeLen = x1 - x0;
-  const scale = tape.widthPx / img.height;
+  const scale = Math.max(tape.widthPx / img.height, tapeLen / img.width);
   const drawW = img.width * scale;
-  const maxOff = Math.max(0, drawW - tapeLen);
-  const offX = rng() * maxOff;
-  ctx.drawImage(img, x0 - offX, y0, drawW, tape.widthPx);
+  const drawH = img.height * scale;
+  const offX = rng() * Math.max(0, drawW - tapeLen);
+  const cy = (y0 + y1) / 2;
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.drawImage(img, x0 - offX, cy - drawH / 2, drawW, drawH);
+  ctx.restore();
 }
 
 // ================= 单斜翘：柔边折痕带 =================
