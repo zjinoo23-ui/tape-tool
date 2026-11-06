@@ -21,21 +21,25 @@ export function mulberry32(seed) {
 // 明度混合会整体替换亮度——深色胶带会被素材的亮底洗白。
 // 所以素材先按「胶带均色亮度」归一化：平均亮度对齐到胶带，折痕的相对明暗不变。
 function drawSlice(ctx, tape, img, rng, texture) {
-  const n = tape.top.length - 1;
-  const x0 = tape.top[0].x;
-  const x1 = tape.top[n].x;
-  const y0 = tape.top[0].y;
-  const y1 = tape.bot[n].y;
-  const tapeLen = x1 - x0;
-  const scale = Math.max(tape.widthPx / img.height, tapeLen / img.width);
+  // 覆盖范围用胶带轮廓的包围盒，而不是首末列之间的矩形：
+  // 波浪/手撕的端面会凸出首末列若干像素，用矩形贴会把端头空出来。
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of tape.outline) {
+    if (p.x < x0) x0 = p.x;
+    if (p.y < y0) y0 = p.y;
+    if (p.x > x1) x1 = p.x;
+    if (p.y > y1) y1 = p.y;
+  }
+  const boxW = x1 - x0;
+  const boxH = y1 - y0;
+  const scale = Math.max(boxH / img.height, boxW / img.width);
   const drawW = img.width * scale;
   const drawH = img.height * scale;
-  const offX = rng() * Math.max(0, drawW - tapeLen);
-  const cy = (y0 + y1) / 2;
+  const offX = rng() * Math.max(0, drawW - boxW);
   const normalized = texture ? normalizeLum(img, tapeLum(texture)) : img;
   ctx.save();
   ctx.globalCompositeOperation = 'luminosity';
-  ctx.drawImage(normalized, x0 - offX, cy - drawH / 2, drawW, drawH);
+  ctx.drawImage(normalized, x0 - offX, (y0 + y1) / 2 - drawH / 2, drawW, drawH);
   ctx.restore();
 }
 
