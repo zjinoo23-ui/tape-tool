@@ -31,7 +31,7 @@ export function renderTape(ctx, W, H, params, texture) {
   drawCreases(ctx, tape, params.crease, texture);
   drawSurfaceShading(ctx, tape);
   drawEndLiftLight(ctx, tape);
-  drawBump(ctx, tape, params.bump, texture);
+  drawBump(ctx, tape, params.bump, texture, params.crease);
   drawEdgeBevel(ctx, tape);
   ctx.restore();
 
@@ -479,7 +479,7 @@ function directionalBand(ctx, path, bbox, { width, color, blur, flip }) {
 // ---- 凹凸光影：凸起 = 胶带被底下的东西垫起，同纸同色。
 // 标准图层顺序：胶带平面 → 凸起的落影 → 凸起面（盖住落影内缘） → 接缝 AO → 方向性侧壁。
 // 顶面不提亮（最多 0.04 平铺白），立体感全交给影子和窄带，光源统一左上。
-function drawBump(ctx, tape, bump, texture) {
+function drawBump(ctx, tape, bump, texture, crease) {
   if (!bump) return;
   const pts = bumpPoints(tape, bump);
   if (!pts || pts.length < 3) return;
@@ -507,11 +507,13 @@ function drawBump(ctx, tape, bump, texture) {
   }
   ctx.restore();
 
-  // 2) 凸起面：同纸同色，原样重铺纹理（同时盖住落影内缘），
-  //    平铺 0.05 白——只比周围亮 2~3 级灰度，不要渐变
+  // 2) 凸起面：同纸同色，原样重铺纹理与折痕（重铺是为了盖住落影内缘），
+  //    再平铺 0.05 白——只比周围亮 2~3 级灰度，不要渐变。
+  //    折痕必须一起重铺：否则凸起面会把已经画过的折痕整片盖掉，凹凸和褶皱不能同时出现。
   ctx.save();
   ctx.clip(raised);
   drawMeshTexture(ctx, tape, texture);
+  drawCreases(ctx, tape, crease, texture);
   ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.restore();
