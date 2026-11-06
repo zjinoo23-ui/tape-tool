@@ -169,8 +169,7 @@ function render() {
     crease: {
       style: state.fold,
       seed: creaseSeed,
-      lightImg: folds.light,
-      crumpleImgs: folds.crumple,
+      imgs: folds,
     },
     seed: SEED,
   }, texture);

@@ -30,15 +30,14 @@ export const FOLD_STYLES = {
   smooth: '平滑',
   light: '轻皱',
   crumple: '揉皱',
-  skew: '单斜翘',
+  skew: '斜痕',
 };
 
-// 折痕素材：白底 AO 明暗 PNG（multiply 叠加），轻皱 1 张；揉皱数组内可多张随机轮换
+// 折痕素材：白底 AO 明暗 PNG（明度叠加），三种折痕各一张，数组内可放多张随机轮换
 export const FOLD_TEXTURES = {
-  light: 'assets/folds/crease_light.png',
-  crumple: [
-    'assets/folds/crease_crumple.png',
-  ],
+  light: ['assets/folds/crease_light.png'],
+  crumple: ['assets/folds/crease_crumple.png'],
+  skew: ['assets/folds/crease_skew.png'],
 };
 
 // 凹凸：胶带局部隆起的预设形状，模拟胶带压在纸上的别的东西（拍立得、卡片）上。

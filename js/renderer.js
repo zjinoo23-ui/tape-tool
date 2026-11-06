@@ -1,8 +1,9 @@
 // renderer.js —— 胶带渲染
-// 层次：柔和投影 → 连续纹理网格 → 折痕（轻皱/揉皱/单斜翘）→ 端头微翘 → 凹凸 → 边缘厚度 → 轮廓
+// 层次：柔和投影 → 连续纹理网格 → 折痕（轻皱/揉皱/斜痕）→ 端头微翘 → 凹凸 → 边缘厚度 → 轮廓
 
 import { buildTape } from './geometry.js';
 import { drawCreases } from './creases.js';
+import { textureBaseColor } from './assets.js';
 
 const supportsFilter = (() => {
   const c = document.createElement('canvas').getContext('2d');
@@ -253,19 +254,6 @@ function drawEndCap(ctx, tape, pattern, tw, th, perPx, col, end, isLeft) {
     texturedTriangle(ctx, pattern, tw, th, B0, B1, E1);
     texturedTriangle(ctx, pattern, tw, th, B0, E1, E0);
   }
-}
-
-// 纹理缩到 1×1 取均色，作为裁剪区的兜底底色（结果缓存到纹理对象上）
-export function textureBaseColor(texture) {
-  if (texture._baseColor) return texture._baseColor;
-  const c = document.createElement('canvas');
-  c.width = 1;
-  c.height = 1;
-  const m = c.getContext('2d', { willReadFrequently: true });
-  m.drawImage(texture.image, 0, 0, 1, 1);
-  const d = m.getImageData(0, 0, 1, 1).data;
-  texture._baseColor = `rgb(${d[0]}, ${d[1]}, ${d[2]})`;
-  return texture._baseColor;
 }
 
 function texturedTriangle(ctx, pattern, tw, th, p0, p1, p2) {
