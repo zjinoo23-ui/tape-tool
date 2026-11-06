@@ -419,7 +419,7 @@ function localK(tape, s) {
 function bumpPoints(tape, bump) {
   if (bump.kind !== 'corner') {
     if (!bump.poly) return [];
-    return jitterPts(bump.poly.map(p => pointAt(tape, p.s, p.v)), 0.7, 2.9);
+    return jitterPts(bump.poly.map(p => pointAt(tape, p.s, p.v)), 0.5, 2.9);
   }
 
   const STEPS = 12;
@@ -435,7 +435,7 @@ function bumpPoints(tape, bump) {
     }
   }
   const poly = [{ s: bump.apex.s, v: bump.apex.v }, ...legs[0], ...legs[1].reverse()];
-  return jitterPts(poly.map(p => pointAt(tape, p.s, p.v)), 0.7, 1.3);
+  return jitterPts(poly.map(p => pointAt(tape, p.s, p.v)), 0.5, 1.3);
 }
 
 // 轮廓点沿法线加 ±amp 的低频平滑抖动（非逐点随机），去掉完美多边形的塑料感
@@ -507,16 +507,16 @@ function drawBump(ctx, tape, bump, texture) {
   for (let i = 1; i < pts.length; i++) raised.lineTo(pts[i].x, pts[i].y);
   raised.closePath();
 
-  // 1) 落影：垫起极薄，影子小、淡、贴边。不抠洞——下一步凸起面会盖住内缘。
+  // 1) 接触影：极短、极淡，只朝右下溢出一点点
   ctx.save();
   if (supportsFilter) {
     ctx.filter = 'blur(2px)';
-    ctx.fillStyle = 'rgba(42, 34, 23, 0.12)';
+    ctx.fillStyle = 'rgba(42, 34, 23, 0.07)';
     ctx.translate(1.2, 1.6);
     ctx.fill(raised);
     ctx.filter = 'none';
   } else {
-    ctx.shadowColor = 'rgba(42, 34, 23, 0.16)';
+    ctx.shadowColor = 'rgba(42, 34, 23, 0.09)';
     ctx.shadowBlur = 2;
     ctx.shadowOffsetX = 1.2;
     ctx.shadowOffsetY = 1.6;
@@ -525,11 +525,12 @@ function drawBump(ctx, tape, bump, texture) {
   }
   ctx.restore();
 
-  // 2) 凸起面：同纸同色，原样重铺纹理（同时盖住落影内缘），只叠 0.04 平铺白
+  // 2) 凸起面：同纸同色，原样重铺纹理（同时盖住落影内缘），
+  //    平铺 0.05 白——只比周围亮 2~3 级灰度，不要渐变
   ctx.save();
   ctx.clip(raised);
   drawMeshTexture(ctx, tape, texture);
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.restore();
 
@@ -543,7 +544,7 @@ function drawBump(ctx, tape, bump, texture) {
   ctx.stroke(raised);
   ctx.restore();
 
-  // 4) 侧壁：背光侧 2px 暗带 + 受光侧 0.5px 细亮线，强度由轮廓相对光源的方向决定
+  // 4) 侧壁：只在右下侧 1px 暗带（alpha 0.12），左上侧不加任何东西
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const p of pts) {
     if (p.x < x0) x0 = p.x;
@@ -551,11 +552,7 @@ function drawBump(ctx, tape, bump, texture) {
     if (p.x > x1) x1 = p.x;
     if (p.y > y1) y1 = p.y;
   }
-  const bbox = { x0, y0, x1, y1 };
-  directionalBand(ctx, raised, bbox, {
-    width: 4, color: 'rgba(48, 38, 26, 0.18)', blur: 0.6, flip: false,
-  });
-  directionalBand(ctx, raised, bbox, {
-    width: 1.2, color: 'rgba(255, 255, 255, 0.07)', blur: 0.4, flip: true,
+  directionalBand(ctx, raised, { x0, y0, x1, y1 }, {
+    width: 2, color: 'rgba(48, 38, 26, 0.12)', blur: 0.6, flip: false,
   });
 }
