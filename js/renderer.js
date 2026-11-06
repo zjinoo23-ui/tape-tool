@@ -489,19 +489,19 @@ function drawBump(ctx, tape, bump, texture, crease) {
   for (let i = 1; i < pts.length; i++) raised.lineTo(pts[i].x, pts[i].y);
   raised.closePath();
 
-  // 1) 接触影：极短、极淡，只朝右下溢出一点点
+  // 1) 接触影：柔和地朝右下溢出
   ctx.save();
   if (supportsFilter) {
-    ctx.filter = 'blur(3.5px)';
-    ctx.fillStyle = 'rgba(42, 34, 23, 0.12)';
-    ctx.translate(1.5, 2);
+    ctx.filter = 'blur(5px)';
+    ctx.fillStyle = 'rgba(42, 34, 23, 0.15)';
+    ctx.translate(2, 2.5);
     ctx.fill(raised);
     ctx.filter = 'none';
   } else {
-    ctx.shadowColor = 'rgba(42, 34, 23, 0.14)';
-    ctx.shadowBlur = 3.5;
-    ctx.shadowOffsetX = 1.5;
-    ctx.shadowOffsetY = 2;
+    ctx.shadowColor = 'rgba(42, 34, 23, 0.15)';
+    ctx.shadowBlur = 5;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 2.5;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.001)';
     ctx.fill(raised);
   }
@@ -521,7 +521,7 @@ function drawBump(ctx, tape, bump, texture, crease) {
   // 3) 接缝 AO：轮廓内侧一整圈约 2px 的窄暗带，「纸贴实了」的关键证据
   ctx.save();
   ctx.clip(raised);
-  if (supportsFilter) ctx.filter = 'blur(0.8px)';
+  if (supportsFilter) ctx.filter = 'blur(1.5px)';
   ctx.strokeStyle = 'rgba(52, 42, 30, 0.20)';
   ctx.lineWidth = 4;
   ctx.lineJoin = 'round';
@@ -537,6 +537,6 @@ function drawBump(ctx, tape, bump, texture, crease) {
     if (p.y > y1) y1 = p.y;
   }
   directionalBand(ctx, raised, { x0, y0, x1, y1 }, {
-    width: 2, color: 'rgba(48, 38, 26, 0.18)', blur: 0.6, flip: false,
+    width: 2, color: 'rgba(48, 38, 26, 0.18)', blur: 1.2, flip: false,
   });
 }
