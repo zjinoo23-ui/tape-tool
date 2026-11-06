@@ -30,8 +30,8 @@ export function renderTape(ctx, W, H, params, texture) {
   drawFoldShading(ctx, tape, params, W, H);
   drawEndShading(ctx, tape, params);
   drawEndLiftLight(ctx, tape);
-  drawBump(ctx, tape, params.bump);
-  drawEdgeBevel(ctx, path, tape);
+  drawBump(ctx, tape, params.bump, texture);
+  drawEdgeBevel(ctx, tape);
   ctx.restore();
 
   // 外轮廓：只留一丝极淡的线，勒住边缘不脏
@@ -171,36 +171,31 @@ function drawEndLiftLight(ctx, tape) {
   }
 }
 
-// ---- 边缘厚度：下缘一道暗边当纸厚，上缘一道浅高光，不是刀切的硬边 ----
-function drawEdgeBevel(ctx, path, tape) {
-  if (supportsFilter) {
+// ---- 边缘厚度：纸厚是物理常量，一律 1~2px 绝对像素。
+// 下缘暗带、上缘细亮线、左右端头纸断面各自独立绘制，不连成一圈闭合描边。
+function drawEdgeBevel(ctx, tape) {
+  const strokeEdge = (pts, width, color, blur) => {
+    if (pts.length < 2) return;
     ctx.save();
-    ctx.clip(path);
-    ctx.filter = 'blur(1.6px)';
-
-    ctx.save();
-    ctx.translate(0.6, 1.9);
-    ctx.strokeStyle = 'rgba(52, 40, 26, 0.30)';
-    ctx.lineWidth = Math.max(2, tape.widthPx * 0.028);
-    ctx.stroke(path);
+    if (supportsFilter) ctx.filter = `blur(${blur}px)`;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.stroke();
     ctx.restore();
+  };
 
-    ctx.save();
-    ctx.translate(-0.5, -1.3);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.30)';
-    ctx.lineWidth = Math.max(1.6, tape.widthPx * 0.022);
-    ctx.stroke(path);
-    ctx.restore();
-
-    ctx.restore();
-    return;
-  }
-
-  ctx.save();
-  ctx.strokeStyle = 'rgba(43, 35, 24, 0.16)';
-  ctx.lineWidth = 1.2;
-  ctx.stroke(path);
-  ctx.restore();
+  // 下缘暗带：描边 2px，被胶带裁剪后内侧露出约 1px
+  strokeEdge(tape.bot, 2, 'rgba(52, 40, 26, 0.18)', 0.7);
+  // 上缘 0.5px 细亮线
+  strokeEdge(tape.top, 1, 'rgba(255, 255, 255, 0.06)', 0.6);
+  // 左右端头：独立的纸断面，不与上下缘相连
+  strokeEdge(tape.leftEnd, 2, 'rgba(52, 40, 26, 0.14)', 0.5);
+  strokeEdge(tape.rightEnd, 2, 'rgba(52, 40, 26, 0.14)', 0.5);
 }
 
 // ---- 纹理：逐三角形仿射贴图，u 只由弧长决定，所以折点处接缝为零 ----
@@ -441,7 +436,7 @@ function localK(tape, s) {
 function bumpPoints(tape, bump) {
   if (bump.kind !== 'corner') {
     if (!bump.poly) return [];
-    return bump.poly.map(p => pointAt(tape, p.s, p.v));
+    return jitterPts(bump.poly.map(p => pointAt(tape, p.s, p.v)), 0.7, 2.9);
   }
 
   const STEPS = 12;
@@ -457,10 +452,69 @@ function bumpPoints(tape, bump) {
     }
   }
   const poly = [{ s: bump.apex.s, v: bump.apex.v }, ...legs[0], ...legs[1].reverse()];
-  return poly.map(p => pointAt(tape, p.s, p.v));
+  return jitterPts(poly.map(p => pointAt(tape, p.s, p.v)), 0.7, 1.3);
 }
 
-function drawBump(ctx, tape, bump) {
+// 轮廓点沿法线加 ±amp 的低频平滑抖动（非逐点随机），去掉完美多边形的塑料感
+function jitterPts(pts, amp, seed) {
+  const m = pts.length;
+  if (m < 3) return pts;
+  return pts.map((p, i) => {
+    const prev = pts[(i - 1 + m) % m];
+    const next = pts[(i + 1) % m];
+    let nx = -(next.y - prev.y);
+    let ny = next.x - prev.x;
+    const l = Math.hypot(nx, ny) || 1;
+    const j = (Math.sin(i * 0.9 + seed) * 0.6 + Math.sin(i * 0.37 + seed * 2.7 + 1.1) * 0.4) * amp;
+    return { x: p.x + (nx / l) * j, y: p.y + (ny / l) * j };
+  });
+}
+
+// 方向性窄带：描边被裁剪后只留轮廓内侧一半，再用「左上→右下」的线性渐变
+// 做 destination-in 遮罩 —— 暗带只在背光（右下）侧显示，亮线只在受光（左上）侧显示，
+// 转角处自然过渡，不会在四个方向同时长侧壁。
+let bandCanvas = null;
+function directionalBand(ctx, path, bbox, { width, color, blur, flip }) {
+  const W = ctx.canvas.width;
+  const H = ctx.canvas.height;
+  if (!bandCanvas) bandCanvas = document.createElement('canvas');
+  if (bandCanvas.width !== W || bandCanvas.height !== H) {
+    bandCanvas.width = W;
+    bandCanvas.height = H;
+  }
+  const o = bandCanvas.getContext('2d');
+  o.clearRect(0, 0, W, H);
+
+  o.save();
+  o.clip(path);
+  if (supportsFilter && blur) o.filter = `blur(${blur}px)`;
+  o.strokeStyle = color;
+  o.lineWidth = width;
+  o.lineJoin = 'round';
+  o.stroke(path);
+  o.restore();
+
+  o.globalCompositeOperation = 'destination-in';
+  const g = o.createLinearGradient(bbox.x0, bbox.y0, bbox.x1, bbox.y1);
+  if (flip) {
+    g.addColorStop(0, 'rgba(0, 0, 0, 1)');
+    g.addColorStop(0.45, 'rgba(0, 0, 0, 0.3)');
+    g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  } else {
+    g.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    g.addColorStop(0.55, 'rgba(0, 0, 0, 0.3)');
+    g.addColorStop(1, 'rgba(0, 0, 0, 1)');
+  }
+  o.fillStyle = g;
+  o.fillRect(0, 0, W, H);
+
+  ctx.drawImage(bandCanvas, 0, 0);
+}
+
+// ---- 凹凸光影：凸起 = 胶带被底下的东西垫起，同纸同色。
+// 标准图层顺序：胶带平面 → 凸起的落影 → 凸起面（盖住落影内缘） → 接缝 AO → 方向性侧壁。
+// 顶面不提亮（最多 0.04 平铺白），立体感全交给影子和窄带，光源统一左上。
+function drawBump(ctx, tape, bump, texture) {
   if (!bump) return;
   const pts = bumpPoints(tape, bump);
   if (!pts || pts.length < 3) return;
@@ -470,37 +524,43 @@ function drawBump(ctx, tape, bump) {
   for (let i = 1; i < pts.length; i++) raised.lineTo(pts[i].x, pts[i].y);
   raised.closePath();
 
-  // 1) 落影：只落在凸起之外的平面上，柔和大模糊
+  // 1) 落影：垫起极薄，影子小、淡、贴边。不抠洞——下一步凸起面会盖住内缘。
   ctx.save();
-  const outline = tape.outline;
-  const tapeWithHole = new Path2D();
-  tapeWithHole.moveTo(outline[0].x, outline[0].y);
-  for (let i = 1; i < outline.length; i++) tapeWithHole.lineTo(outline[i].x, outline[i].y);
-  tapeWithHole.closePath();
-  tapeWithHole.addPath(raised);
-  ctx.clip(tapeWithHole, 'evenodd');
-
   if (supportsFilter) {
-    ctx.filter = 'blur(10px)';
-    ctx.fillStyle = 'rgba(42, 34, 23, 0.28)';
-    ctx.translate(3, 4);
+    ctx.filter = 'blur(2px)';
+    ctx.fillStyle = 'rgba(42, 34, 23, 0.12)';
+    ctx.translate(1.2, 1.6);
     ctx.fill(raised);
     ctx.filter = 'none';
   } else {
-    ctx.shadowColor = 'rgba(42, 34, 23, 0.34)';
-    ctx.shadowBlur = 9;
-    ctx.shadowOffsetX = 3;
-    ctx.shadowOffsetY = 4;
+    ctx.shadowColor = 'rgba(42, 34, 23, 0.16)';
+    ctx.shadowBlur = 2;
+    ctx.shadowOffsetX = 1.2;
+    ctx.shadowOffsetY = 1.6;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.001)';
     ctx.fill(raised);
-    ctx.shadowColor = 'transparent';
   }
   ctx.restore();
 
-  // 2) 凸起面：沿光向的柔和明暗渐变，边缘再柔化一下
+  // 2) 凸起面：同纸同色，原样重铺纹理（同时盖住落影内缘），只叠 0.04 平铺白
   ctx.save();
   ctx.clip(raised);
+  drawMeshTexture(ctx, tape, texture);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.restore();
 
+  // 3) 接缝 AO：轮廓内侧一整圈约 1.5px 的窄暗带，「纸贴实了」的关键证据
+  ctx.save();
+  ctx.clip(raised);
+  if (supportsFilter) ctx.filter = 'blur(0.8px)';
+  ctx.strokeStyle = 'rgba(52, 42, 30, 0.13)';
+  ctx.lineWidth = 3;
+  ctx.lineJoin = 'round';
+  ctx.stroke(raised);
+  ctx.restore();
+
+  // 4) 侧壁：背光侧 2px 暗带 + 受光侧 0.5px 细亮线，强度由轮廓相对光源的方向决定
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const p of pts) {
     if (p.x < x0) x0 = p.x;
@@ -508,31 +568,11 @@ function drawBump(ctx, tape, bump) {
     if (p.x > x1) x1 = p.x;
     if (p.y > y1) y1 = p.y;
   }
-
-  // 凸起面整体提亮：高出来的平面离光源更近
-  const g = ctx.createLinearGradient(x0, y0, x1, y1);
-  g.addColorStop(0, 'rgba(255, 255, 255, 0.26)');
-  g.addColorStop(0.45, 'rgba(255, 255, 255, 0.20)');
-  g.addColorStop(1, 'rgba(255, 255, 255, 0.13)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-
-  // 迎光侧一道绒边：台阶顶部折起来的那道高光，模糊成过渡而不是硬线
-  const lw = Math.max(5, tape.widthPx * 0.14);
-  if (supportsFilter) {
-    ctx.filter = 'blur(7px)';
-    ctx.save();
-    ctx.translate(-2, -2);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.32)';
-    ctx.lineWidth = lw;
-    ctx.stroke(raised);
-    ctx.restore();
-    ctx.filter = 'none';
-  } else {
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-    ctx.lineWidth = lw * 1.3;
-    ctx.stroke(raised);
-  }
-
-  ctx.restore();
+  const bbox = { x0, y0, x1, y1 };
+  directionalBand(ctx, raised, bbox, {
+    width: 4, color: 'rgba(48, 38, 26, 0.18)', blur: 0.6, flip: false,
+  });
+  directionalBand(ctx, raised, bbox, {
+    width: 1.2, color: 'rgba(255, 255, 255, 0.07)', blur: 0.4, flip: true,
+  });
 }

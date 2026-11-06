@@ -233,10 +233,29 @@ export function buildTape(opts) {
   const bot = cols.map(c => c.bot);
   const outline = [...top, ...rightEnd, ...bot.slice().reverse(), ...leftEnd];
 
+  // ---- 轮廓微抖动：沿法线 ±0.9px 的低频平滑抖动（两个不同频率正弦叠加），
+  // 去掉「数学生成的完美矩形」感。就地修改，outline / top / bot / 端头共享同一批点。
+  const JITTER_AMP = 0.9;
+  const m = outline.length;
+  for (let i = 0; i < m; i++) {
+    const prev = outline[(i - 1 + m) % m];
+    const next = outline[(i + 1) % m];
+    let nx = -(next.y - prev.y);
+    let ny = next.x - prev.x;
+    const l = Math.hypot(nx, ny) || 1;
+    nx /= l; ny /= l;
+    const j = (Math.sin(i * 0.31 + seed * 1.7) * 0.6
+      + Math.sin(i * 0.113 + seed * 3.1 + 2.4) * 0.4) * JITTER_AMP;
+    outline[i].x += nx * j;
+    outline[i].y += ny * j;
+  }
+
   return {
     cols,
     top,
     bot,
+    leftEnd,
+    rightEnd,
     folds,
     outline,
     total,
