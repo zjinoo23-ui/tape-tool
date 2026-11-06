@@ -27,8 +27,8 @@ export function renderTape(ctx, W, H, params, texture) {
   ctx.save();
   ctx.clip(path);
   drawMeshTexture(ctx, tape, texture);
-  drawSurfaceShading(ctx, tape);
   drawCreases(ctx, tape, params.crease);
+  drawSurfaceShading(ctx, tape);
   drawEndLiftLight(ctx, tape);
   drawBump(ctx, tape, params.bump, texture);
   drawEdgeBevel(ctx, tape);

@@ -30,16 +30,16 @@ export function getTexture(key) {
   return images.find(t => t.key === key) || images[0] || null;
 }
 
-// ---- 揉皱纹理（预烘焙 PNG，加载失败则「揉皱」退化为无折痕） ----
-const crumples = [];
+// ---- 折痕素材（预烘焙 PNG，加载失败则对应效果退化为无折痕） ----
+const folds = { light: null, crumple: [] };
 
-export async function loadCrumples(paths) {
-  const results = await Promise.all(paths.map(loadImage));
-  crumples.length = 0;
-  for (const img of results) if (img) crumples.push(img);
-  return crumples;
+export async function loadFolds({ light, crumple }) {
+  folds.light = await loadImage(light);
+  const results = await Promise.all(crumple.map(loadImage));
+  folds.crumple = results.filter(Boolean);
+  return folds;
 }
 
-export function getCrumples() {
-  return crumples;
+export function getFolds() {
+  return folds;
 }

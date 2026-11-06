@@ -1,21 +1,26 @@
 <!DOCTYPE html>
-<!-- 揉皱纹理烘焙页：用无头浏览器打开后，把 3 张 2048×512 透明底 PNG 挂到 window.baked 上。
-     用法见 /tmp/pptr/bake.mjs（或任何 puppeteer 脚本）：读取 window.baked 存到 assets/folds/。 -->
+<!-- 折痕素材烘焙页：用无头浏览器打开后，把 3 张 2000×300 透明底 PNG 挂到 window.baked 上。
+     产物：crease_light.png（轻皱）/ crease_crumple.png、crease_crumple_2.png（揉皱）。
+     用法见烘焙脚本：读取 window.baked 存到 assets/folds/。后续有正式素材可直接替换。 -->
 <html lang="zh-CN">
-<head><meta charset="utf-8"><title>bake crumple textures</title></head>
+<head><meta charset="utf-8"><title>bake fold textures</title></head>
 <body>
-<canvas id="c" width="2048" height="512"></canvas>
+<canvas id="c" width="2000" height="300"></canvas>
 <script type="module">
-import { bakeCrumplePattern } from '../js/creases.js';
+import { bakeLightPattern, bakeCrumplePattern } from '../js/creases.js';
 
-const seeds = [101, 202, 303];
 const c = document.getElementById('c');
+const jobs = [
+  ['crease_light.png', ctx => bakeLightPattern(ctx, c.width, c.height, 11)],
+  ['crease_crumple.png', ctx => bakeCrumplePattern(ctx, c.width, c.height, 21)],
+  ['crease_crumple_2.png', ctx => bakeCrumplePattern(ctx, c.width, c.height, 77)],
+];
 window.baked = [];
-for (const s of seeds) {
+for (const [name, fn] of jobs) {
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, c.width, c.height);
-  bakeCrumplePattern(ctx, c.width, c.height, s);
-  window.baked.push(c.toDataURL('image/png'));
+  fn(ctx);
+  window.baked.push({ name, data: c.toDataURL('image/png') });
 }
 window.bakeDone = true;
 </script>

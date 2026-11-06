@@ -33,12 +33,15 @@ export const FOLD_STYLES = {
   skew: '单斜翘',
 };
 
-// 揉皱纹理：预烘焙的透明底 PNG（tools/bake-crumple.html 生成），运行时随机轮换
-export const CRUMPLE_TEXTURES = [
-  'assets/folds/crumple-1.png',
-  'assets/folds/crumple-2.png',
-  'assets/folds/crumple-3.png',
-];
+// 折痕素材：透明底长条 PNG（2000×300，tools/bake-crumple.html 生成，后续可换正式素材）
+// 轻皱 1 张；揉皱 2 张随机轮换。运行时随机取横向切片，不拉伸不平铺。
+export const FOLD_TEXTURES = {
+  light: 'assets/folds/crease_light.png',
+  crumple: [
+    'assets/folds/crease_crumple.png',
+    'assets/folds/crease_crumple_2.png',
+  ],
+};
 
 // 凹凸：胶带局部隆起的预设形状，模拟胶带压在纸上的别的东西（拍立得、卡片）上。
 // poly 用 (s, v) 描述，s 为沿胶带长度方向的弧长比例，v 为宽度方向比例 [0=上边,1=下边]，

@@ -1,7 +1,7 @@
 // main.js —— 入口：参数面板接线 + 预览与导出
 
-import { VERSION, CANVAS, PX_PER_CM, LENGTH, WIDTHS, TEXTURES, SEED, BUMP_STYLES, CRUMPLE_TEXTURES } from './config.js';
-import { loadTextures, getTextures, getTexture, loadCrumples, getCrumples } from './assets.js';
+import { VERSION, CANVAS, PX_PER_CM, LENGTH, WIDTHS, TEXTURES, SEED, BUMP_STYLES, FOLD_TEXTURES } from './config.js';
+import { loadTextures, getTextures, getTexture, loadFolds, getFolds } from './assets.js';
 import { renderTape } from './renderer.js';
 import { cropToContent } from './export.js';
 import { saveImage } from './platform.js';
@@ -155,9 +155,9 @@ function render() {
 
   const lengthPx = state.lengthCm * PX_PER_CM;
 
-  // 每次生成换折痕种子：两次不出一样的褶；揉皱在预烘焙纹理中轮换
+  // 每次生成换折痕种子：两次不出一样的褶；素材横向切片位置也随机
   const creaseSeed = (Math.random() * 0xffffffff) >>> 0;
-  const crumples = getCrumples();
+  const folds = getFolds();
 
   renderTape(exportCtx, CANVAS.w, CANVAS.h, {
     lengthPx,
@@ -169,7 +169,8 @@ function render() {
     crease: {
       style: state.fold,
       seed: creaseSeed,
-      img: crumples.length ? crumples[creaseSeed % crumples.length] : null,
+      lightImg: folds.light,
+      crumpleImgs: folds.crumple,
     },
     seed: SEED,
   }, texture);
@@ -258,7 +259,7 @@ window.addEventListener('resize', () => {
     window.alert('纹理素材加载失败，请检查 assets/textures/ 下的图片');
     return;
   }
-  await loadCrumples(CRUMPLE_TEXTURES);
+  await loadFolds(FOLD_TEXTURES);
   buildTextureGrid();
   lengthSlider.min = String(LENGTH.min);
   lengthSlider.max = String(LENGTH.max);
