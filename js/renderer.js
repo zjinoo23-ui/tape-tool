@@ -113,15 +113,14 @@ function drawEndLiftShadow(ctx, tape, path) {
   }
 }
 
-// ---- 表面光影：统一光源在左上，横截面亮上暗下，像一条卷起来的纸带 ----
+// ---- 表面光影：只留上缘一点点迎光提亮；底部暗带已取消（读成脏影） ----
 function drawSurfaceShading(ctx, tape) {
   const mid = tape.cols[Math.floor(tape.cols.length / 2)] || tape.cols[0];
   const g = ctx.createLinearGradient(mid.top.x, mid.top.y, mid.bot.x, mid.bot.y);
   g.addColorStop(0, 'rgba(255, 255, 255, 0.20)');
   g.addColorStop(0.16, 'rgba(255, 255, 255, 0.07)');
   g.addColorStop(0.5, 'rgba(255, 255, 255, 0)');
-  g.addColorStop(0.86, 'rgba(38, 30, 18, 0.06)');
-  g.addColorStop(1, 'rgba(38, 30, 18, 0.18)');
+  g.addColorStop(1, 'rgba(255, 255, 255, 0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 }
