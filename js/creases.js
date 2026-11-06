@@ -1,9 +1,10 @@
 // creases.js —— 折痕：轻皱 / 揉皱 / 单斜翘
-// 全局约定：
-//   光源固定在左上；每条折痕 = 暗线 + 亮线一对，
-//   暗线在折痕右下侧、亮线在左上侧，间距约 1px；
-//   折痕形状为带轻微弯曲的二次贝塞尔，全部画在胶带裁剪区内，到边自动截断。
-// 揉皱不程序生成曲线（密集随机曲线会假），用预烘焙的透明底 PNG 叠加。
+// 全局约定（光源固定在左上）：
+//   每条折痕 = 暗线 + 亮线成对；暗线在右下侧、亮线在左上侧，中心间距 1px，各宽 1px，blur 0.3~0.5。
+//   远看两条线合成一条「有宽度的折痕带」，这是折痕能被读出来的关键。
+//   折痕全部 clip 在胶带内（由调用方裁剪），到边自动截断。
+// 揉皱不程序随机曲线（密集随机曲线会假），用预烘焙的透明底 PNG 叠加；
+// 烘焙内容同样是「折线 + 成对明暗线」。
 
 import { DEG } from './geometry.js';
 
@@ -39,94 +40,135 @@ function mapper(tape) {
   });
 }
 
-function quadPath(p0, p1, p2) {
+// 折痕的「右下法线」：nx > 0、ny > 0。暗线沿它偏移、亮线沿反向偏移。
+function rightDownNormal(dx, dy) {
+  let nx = -dy;
+  let ny = dx;
+  const l = Math.hypot(nx, ny) || 1;
+  nx /= l; ny /= l;
+  if (nx + ny < 0) { nx = -nx; ny = -ny; }
+  return { x: nx, y: ny };
+}
+
+function quad(p0, p1, p2) {
   const path = new Path2D();
   path.moveTo(p0.x, p0.y);
   path.quadraticCurveTo(p1.x, p1.y, p2.x, p2.y);
-  return path;
+  return { path, dir: { x: p2.x - p0.x, y: p2.y - p0.y } };
 }
 
-// 画一条折痕对：暗线偏右下、亮线偏左上
-function strokePair(ctx, path, darkAlpha, brightAlpha, darkW = 1, brightW = 1) {
+function polyline(pts) {
+  const path = new Path2D();
+  path.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) path.lineTo(pts[i].x, pts[i].y);
+  const dir = { x: pts[pts.length - 1].x - pts[0].x, y: pts[pts.length - 1].y - pts[0].y };
+  return { path, dir };
+}
+
+// 一对折痕线：暗线偏右下、亮线偏左上，中心距约 1.6px，叠成一条 2~3px 的折痕带。
+// 暗线略粗（1.5px）以在浅色纹理上也读得出，亮线 1.1px 只在深浅交界处提一点光。
+function strokePair(ctx, path, dir, darkAlpha, brightAlpha, width = 1) {
+  const n = rightDownNormal(dir.x, dir.y);
+
   ctx.save();
-  ctx.translate(0.4, 0.6);
-  if (supportsFilter) ctx.filter = 'blur(0.4px)';
+  ctx.translate(n.x * 0.8, n.y * 0.8);
+  if (supportsFilter) ctx.filter = 'blur(0.45px)';
   ctx.strokeStyle = `rgba(42, 34, 23, ${darkAlpha})`;
-  ctx.lineWidth = darkW;
+  ctx.lineWidth = width * 1.5;
   ctx.stroke(path);
   ctx.restore();
 
   ctx.save();
-  ctx.translate(-0.4, -0.6);
+  ctx.translate(-n.x * 0.8, -n.y * 0.8);
   if (supportsFilter) ctx.filter = 'blur(0.4px)';
   ctx.strokeStyle = `rgba(255, 255, 255, ${brightAlpha})`;
-  ctx.lineWidth = brightW;
+  ctx.lineWidth = width * 1.1;
   ctx.stroke(path);
   ctx.restore();
 }
 
-// ---- 轻皱：2~4 条稀疏大折痕，随机散布 ----
+// ---- 轻皱：3~5 条长折痕，接近直线（只允许一个轻微弧度），多数同向 ----
 function drawLight(ctx, tape, rng) {
   const map = mapper(tape);
   const W = tape.widthPx;
-  const count = 2 + Math.floor(rng() * 3); // 2~4 条
+  const count = 3 + Math.floor(rng() * 3);        // 3~5 条
+  const baseA = 20 + rng() * 30;                  // 基准 20°~50°
+  const baseSign = rng() < 0.5 ? 1 : -1;
+
   for (let i = 0; i < count; i++) {
-    const sC = 0.12 + rng() * 0.76;             // 散布整个表面，不集中在两端
-    const vC = 0.30 + rng() * 0.40;
-    const aDeg = 30 + rng() * 30 + (rng() - 0.5) * 10; // 与长边 30°~60°，微差 10°
-    const a = aDeg * DEG * (rng() < 0.5 ? 1 : -1);
-    const len = W * (1 / 3 + rng() / 3);        // 宽度的 1/3~2/3
+    const aDeg = baseA + (rng() - 0.5) * 16;      // 同向微差 ±8°
+    const sign = rng() < 0.78 ? baseSign : -baseSign;
+    const a = aDeg * DEG * sign;
+    const len = W * (0.5 + rng() * 0.25);         // 1/2~3/4 带宽
+    const sC = 0.14 + rng() * 0.72;
+    const vC = 0.16 + rng() * 0.68;
     const c = map(sC, vC);
     const dx = Math.cos(a), dy = Math.sin(a);
     const p0 = { x: c.x - dx * len / 2, y: c.y - dy * len / 2 };
     const p2 = { x: c.x + dx * len / 2, y: c.y + dy * len / 2 };
-    const bend = (5 + rng() * 5) * (rng() < 0.5 ? 1 : -1); // 控制点偏移 5~10px
+    // 只允许一个轻微弧度：控制点偏移 3~6px
+    const bend = (3 + rng() * 3) * (rng() < 0.5 ? 1 : -1);
     const p1 = { x: (p0.x + p2.x) / 2 - dy * bend, y: (p0.y + p2.y) / 2 + dx * bend };
-    strokePair(ctx, quadPath(p0, p1, p2), 0.08 + rng() * 0.04, 0.05 + rng() * 0.03);
+    const { path, dir } = quad(p0, p1, p2);
+    strokePair(ctx, path, dir, 0.14 + rng() * 0.04, 0.10 + rng() * 0.02);
   }
 }
 
-// ---- 单斜翘：一条主折痕横贯胶带 + 随机一端翘起投影 ----
+// ---- 单斜翘：一条主折痕横贯胶带，整条右下侧有一层连续淡投影 ----
 function drawSkew(ctx, tape, rng) {
   const map = mapper(tape);
   const W = tape.widthPx;
-  const sC = 0.25 + rng() * 0.5;                // 位置随机，不固定中间
-  const a = (30 + rng() * 15) * DEG;            // 斜 30°~45°
-  // 左下到右上：y 随 x 增大而减小
-  const dx = Math.cos(a), dy = -Math.sin(a);
-  const len = (W * 1.2) / Math.sin(a);          // 横贯整条胶带，出头被裁掉
+  const sC = 0.28 + rng() * 0.44;                 // 位置随机，不固定中间
+  const a = (30 + rng() * 15) * DEG;               // 斜 30°~45°
+  const dx = Math.cos(a), dy = -Math.sin(a);       // 左下 → 右上
+  const len = (W * 1.25) / Math.sin(a);            // 横贯整条胶带，出头被裁掉
   const c = map(sC, 0.5);
   const p0 = { x: c.x - dx * len / 2, y: c.y - dy * len / 2 };
   const p2 = { x: c.x + dx * len / 2, y: c.y + dy * len / 2 };
-  const bend = (2 + rng() * 3) * (rng() < 0.5 ? 1 : -1); // 接近直线，轻微弧度
+  const bend = (2 + rng() * 2.5) * (rng() < 0.5 ? 1 : -1); // 接近直线，微弧
   const p1 = { x: (p0.x + p2.x) / 2 - dy * bend, y: (p0.y + p2.y) / 2 + dx * bend };
-  strokePair(ctx, quadPath(p0, p1, p2), 0.15 + rng() * 0.05, 0.10 + rng() * 0.05);
+  const { path, dir } = quad(p0, p1, p2);
 
-  // 翘起投影：随机选折痕一端，影子落在折痕右下侧的半平面内
-  const end = rng() < 0.5 ? p0 : p2;
-  const inX = end === p0 ? dx : -dx;            // 从端点向里的方向
-  const inY = end === p0 ? dy : -dy;
-  const nx = -dy, ny = dx;                      // 右下法线（本角度范围内恒指向右下）
-  const big = tape.total;
-  const hp = new Path2D();
-  hp.moveTo(p0.x, p0.y);
-  hp.lineTo(p2.x, p2.y);
-  hp.lineTo(p2.x + nx * big, p2.y + ny * big);
-  hp.lineTo(p0.x + nx * big, p0.y + ny * big);
-  hp.closePath();
+  // 投影：沿整条折痕的右下侧铺 4~6px 并逐渐变淡（不是孤立小三角）
+  projectAlong(ctx, p0, p1, p2, dir, 4.5 + rng() * 1.5, 0.16);
+
+  // 主折痕本身：比其他效果深
+  strokePair(ctx, path, dir, 0.24 + rng() * 0.04, 0.14 + rng() * 0.04);
+}
+
+// 沿折痕右下侧铺一条渐变带：宽度 bandW，越远离折痕越淡
+function projectAlong(ctx, p0, p1, p2, dir, bandW, alpha) {
+  const n = rightDownNormal(dir.x, dir.y);
+  const STEPS = 18;
+  const pts = [];
+  for (let i = 0; i <= STEPS; i++) {
+    const t = i / STEPS;
+    const mt = 1 - t;
+    pts.push({
+      x: mt * mt * p0.x + 2 * mt * t * p1.x + t * t * p2.x,
+      y: mt * mt * p0.y + 2 * mt * t * p1.y + t * t * p2.y,
+    });
+  }
+
+  const band = new Path2D();
+  band.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) band.lineTo(pts[i].x, pts[i].y);
+  for (let i = pts.length - 1; i >= 0; i--) {
+    band.lineTo(pts[i].x + n.x * bandW, pts[i].y + n.y * bandW);
+  }
+  band.closePath();
+
+  const mid = pts[Math.floor(pts.length / 2)];
+  const g = ctx.createLinearGradient(mid.x, mid.y, mid.x + n.x * bandW, mid.y + n.y * bandW);
+  g.addColorStop(0, `rgba(42, 34, 23, ${alpha})`);
+  g.addColorStop(0.35, `rgba(42, 34, 23, ${alpha * 0.55})`);
+  g.addColorStop(1, 'rgba(42, 34, 23, 0)');
 
   ctx.save();
-  ctx.clip(hp);
   ctx.translate(1.5, 2);
-  if (supportsFilter) ctx.filter = 'blur(5px)';
-  ctx.strokeStyle = 'rgba(42, 34, 23, 0.09)';
-  ctx.lineWidth = W * 0.22;
-  ctx.lineCap = 'round';
-  const seg = len * 0.20;
-  ctx.beginPath();
-  ctx.moveTo(end.x + inX * seg * 0.1, end.y + inY * seg * 0.1);
-  ctx.lineTo(end.x + inX * seg * 0.8, end.y + inY * seg * 0.8);
-  ctx.stroke();
+  if (supportsFilter) ctx.filter = 'blur(1.8px)';
+  ctx.fillStyle = g;
+  ctx.fill(band);
   ctx.restore();
 }
 
@@ -154,29 +196,31 @@ export function drawCreases(ctx, tape, crease) {
   else if (crease.style === 'crumple' && crease.img) drawCrumple(ctx, tape, crease.img);
 }
 
-// ---- 烘焙用：在 W×H 透明画布上画一张揉皱纹理 ----
-// 短碎痕、随机多方向、互不相交；暗 0.05~0.10、亮 0.03~0.06（密集会叠加，单条要浅）
+// ---- 烘焙用：一张揉皱纹理（2048×512 透明底） ----
+// 折线折痕：2~4 段短直线首尾相连，有转折角；方向完全随机，允许交叉、端点相接。
+// 数量按「一条胶带上能看到 8~12 条」倒推：纹理高 = 2.2 倍带宽，可视区约为纹理的 23%。
 export function bakeCrumplePattern(ctx, W, H, seed) {
   const rng = mulberry32(seed);
-  const pts = [];
-  const COUNT = 78;
-  let guard = 0;
-  while (pts.length < COUNT && guard++ < 8000) {
-    const len = 30 + rng() * 90;                // 30~120px 短痕（运行时约缩到一半）
-    const x = 50 + rng() * (W - 100);
-    const y = 40 + rng() * (H - 80);
-    // 与其他痕保持最小距离，避免相交、端点相碰
-    const ok = pts.every(p => Math.hypot(p.x - x, p.y - y) > (p.len + len) / 2 + 46);
-    if (!ok) continue;
-    pts.push({ x, y, len, a: rng() * Math.PI });
-  }
-  for (const p of pts) {
-    const dx = Math.cos(p.a), dy = Math.sin(p.a);
-    const p0 = { x: p.x - dx * p.len / 2, y: p.y - dy * p.len / 2 };
-    const p2 = { x: p.x + dx * p.len / 2, y: p.y + dy * p.len / 2 };
-    const bend = p.len * (0.15 + rng() * 0.25) * (rng() < 0.5 ? 1 : -1); // 短而急
-    const p1 = { x: (p0.x + p2.x) / 2 - dy * bend, y: (p0.y + p2.y) / 2 + dx * bend };
-    // 烘焙尺寸 2048×512，运行时约缩到 0.4~1 倍，线宽和 alpha 都按偏深给
-    strokePair(ctx, quadPath(p0, p1, p2), 0.06 + rng() * 0.06, 0.04 + rng() * 0.04, 2.6, 2);
+  const tapeW = H / 2.2;          // 与 drawCrumple 的缩放约定保持一致
+  const COUNT = 54;               // 约 12 条落在一条胶带上
+  const margin = 20;
+
+  for (let i = 0; i < COUNT; i++) {
+    const total = tapeW * (1 / 6 + rng() / 6);      // 总长 1/6~1/3 带宽
+    const segs = 2 + Math.floor(rng() * 3);         // 2~4 段
+    let a = rng() * Math.PI * 2;                    // 完全随机方向
+    let x = margin + rng() * (W - margin * 2);
+    let y = margin + rng() * (H - margin * 2);
+    const pts = [{ x, y }];
+    const segLen = total / segs;
+    for (let k = 0; k < segs; k++) {
+      a += (rng() - 0.5) * 80 * DEG;                // 转折角
+      x += Math.cos(a) * segLen;
+      y += Math.sin(a) * segLen;
+      pts.push({ x, y });
+    }
+    const { path, dir } = polyline(pts);
+    // 烘焙时纹理会被缩到 0.77 倍左右，线宽给 1.8 时才约合显示 1.4px
+    strokePair(ctx, path, dir, 0.11 + rng() * 0.05, 0.06 + rng() * 0.04, 1.8);
   }
 }
