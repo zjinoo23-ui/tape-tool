@@ -5,6 +5,7 @@
 // 光源统一左上：亮边在左上，暗线和投影在右下。所有折痕由调用方 clip 在胶带内。
 
 import { DEG } from './geometry.js';
+import { textureBaseColor } from './renderer.js';
 
 const supportsFilter = (() => {
   try {
@@ -29,8 +30,11 @@ export function mulberry32(seed) {
 
 // ---- 素材叠加：等比缩放（宽度对齐带宽，胶带更长时按长度对齐并垂直居中裁剪），
 // 随机取横向切片位置，不拉伸不平铺。
-// 素材是白底 AO 明暗图，用 multiply 叠：白色不变、折痕暗部压到纸纹上。
-function drawSlice(ctx, tape, img, rng) {
+// 素材是白底 AO 明暗图，用「明度」混合叠加：只把素材的明暗搬到胶带上，
+// 保留胶带本身的色相/饱和度，不会像 multiply 那样整体压暗发脏。
+// 但明度混合会整体替换亮度——深色胶带会被素材的亮底洗白。
+// 所以素材先按「胶带均色亮度」归一化：平均亮度对齐到胶带，折痕的相对明暗不变。
+function drawSlice(ctx, tape, img, rng, texture) {
   const n = tape.top.length - 1;
   const x0 = tape.top[0].x;
   const x1 = tape.top[n].x;
@@ -42,10 +46,54 @@ function drawSlice(ctx, tape, img, rng) {
   const drawH = img.height * scale;
   const offX = rng() * Math.max(0, drawW - tapeLen);
   const cy = (y0 + y1) / 2;
+  const normalized = texture ? normalizeLum(img, tapeLum(texture)) : img;
   ctx.save();
-  ctx.globalCompositeOperation = 'multiply';
-  ctx.drawImage(img, x0 - offX, cy - drawH / 2, drawW, drawH);
+  ctx.globalCompositeOperation = 'luminosity';
+  ctx.drawImage(normalized, x0 - offX, cy - drawH / 2, drawW, drawH);
   ctx.restore();
+}
+
+// 胶带均色的相对亮度（0~1）
+function tapeLum(texture) {
+  const m = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(textureBaseColor(texture));
+  if (!m) return 0.9;
+  return (0.2126 * +m[1] + 0.7152 * +m[2] + 0.0722 * +m[3]) / 255;
+}
+
+// 把素材的平均亮度缩放到 targetLum，折痕的相对明暗差保持不变。结果按素材+目标亮度分档缓存。
+const normCache = new WeakMap();
+function normalizeLum(img, targetLum) {
+  const bucket = Math.round(targetLum * 20) / 20; // 5% 一档，避免无谓重算
+  let entry = normCache.get(img);
+  if (entry && entry.bucket === bucket) return entry.canvas;
+
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const m = c.getContext('2d', { willReadFrequently: true });
+  m.drawImage(img, 0, 0);
+  const d = m.getImageData(0, 0, w, h);
+  const px = d.data;
+
+  let sum = 0;
+  const count = w * h;
+  for (let i = 0; i < px.length; i += 4) {
+    sum += 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2];
+  }
+  const mean = sum / count / 255 || 1;
+  const k = bucket / mean;
+
+  for (let i = 0; i < px.length; i += 4) {
+    px[i] = Math.min(255, px[i] * k);
+    px[i + 1] = Math.min(255, px[i + 1] * k);
+    px[i + 2] = Math.min(255, px[i + 2] * k);
+  }
+  m.putImageData(d, 0, 0);
+
+  normCache.set(img, { bucket, canvas: c });
+  return c;
 }
 
 // ================= 单斜翘：柔边折痕带 =================
@@ -187,14 +235,14 @@ function drawSkew(ctx, tape, rng) {
   });
 }
 
-export function drawCreases(ctx, tape, crease) {
+export function drawCreases(ctx, tape, crease, texture) {
   if (!crease || !crease.style || crease.style === 'smooth') return;
   const rng = mulberry32(crease.seed || 1);
   if (crease.style === 'light') {
-    if (crease.lightImg) drawSlice(ctx, tape, crease.lightImg, rng);
+    if (crease.lightImg) drawSlice(ctx, tape, crease.lightImg, rng, texture);
   } else if (crease.style === 'crumple') {
     const imgs = crease.crumpleImgs || [];
-    if (imgs.length) drawSlice(ctx, tape, imgs[Math.floor(rng() * imgs.length)], rng);
+    if (imgs.length) drawSlice(ctx, tape, imgs[Math.floor(rng() * imgs.length)], rng, texture);
   } else if (crease.style === 'skew') {
     drawSkew(ctx, tape, rng);
   }

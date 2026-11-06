@@ -27,7 +27,7 @@ export function renderTape(ctx, W, H, params, texture) {
   ctx.save();
   ctx.clip(path);
   drawMeshTexture(ctx, tape, texture);
-  drawCreases(ctx, tape, params.crease);
+  drawCreases(ctx, tape, params.crease, texture);
   drawSurfaceShading(ctx, tape);
   drawEndLiftLight(ctx, tape);
   drawBump(ctx, tape, params.bump, texture);
@@ -183,6 +183,20 @@ function drawEdgeBevel(ctx, tape) {
 
 // ---- 纹理：逐三角形仿射贴图，u 只由弧长决定，所以折点处接缝为零 ----
 function drawMeshTexture(ctx, tape, texture) {
+  // 兜底：先用纹理的均色填满整个胶带裁剪区。
+  // 这样任何长度 / 端头样式 / 抖动下，即使网格有缝也只会露纸色，绝不露透明。
+  ctx.save();
+  ctx.fillStyle = textureBaseColor(texture);
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of tape.outline) {
+    if (p.x < x0) x0 = p.x;
+    if (p.y < y0) y0 = p.y;
+    if (p.x > x1) x1 = p.x;
+    if (p.y > y1) y1 = p.y;
+  }
+  ctx.fillRect(x0 - 2, y0 - 2, x1 - x0 + 4, y1 - y0 + 4);
+  ctx.restore();
+
   const pattern = ctx.createPattern(texture.image, 'repeat');
   if (!pattern) return;
 
@@ -205,6 +219,53 @@ function drawMeshTexture(ctx, tape, texture) {
     texturedTriangle(ctx, pattern, tw, th, A, B, D);
     texturedTriangle(ctx, pattern, tw, th, B, C, D);
   }
+
+  // 端头盖帽：波浪/手撕的端面超出首末列，逐段补三角形扇，纹理延伸到端头尖
+  drawEndCap(ctx, tape, pattern, tw, th, perPx, cols[cols.length - 1], tape.rightEnd, false);
+  drawEndCap(ctx, tape, pattern, tw, th, perPx, cols[0], tape.leftEnd, true);
+}
+
+// 端头盖帽：把端面多边形和首/末列之间的区域用三角形扇填满。
+// end 点与列边缘的对应关系：rightEnd 从上(d=0)到下(d=1)，leftEnd 从下(d=1)到上(d=0)。
+function drawEndCap(ctx, tape, pattern, tw, th, perPx, col, end, isLeft) {
+  const N = end.length - 1;
+  const uB = col.s * perPx;
+  for (let i = 0; i < N; i++) {
+    const d0 = isLeft ? 1 - i / N : i / N;
+    const d1 = isLeft ? 1 - (i + 1) / N : (i + 1) / N;
+    const base0 = {
+      x: col.top.x + (col.bot.x - col.top.x) * d0,
+      y: col.top.y + (col.bot.y - col.top.y) * d0,
+    };
+    const base1 = {
+      x: col.top.x + (col.bot.x - col.top.x) * d1,
+      y: col.top.y + (col.bot.y - col.top.y) * d1,
+    };
+    const e0 = end[i];
+    const e1 = end[i + 1];
+    // 沿路径切线的有符号偏移（可为负，比如波浪的凹口）
+    const off0 = (e0.x - base0.x) * col.tR.x + (e0.y - base0.y) * col.tR.y;
+    const off1 = (e1.x - base1.x) * col.tR.x + (e1.y - base1.y) * col.tR.y;
+    const B0 = { x: base0.x, y: base0.y, u: uB, v: d0 };
+    const B1 = { x: base1.x, y: base1.y, u: uB, v: d1 };
+    const E0 = { x: e0.x, y: e0.y, u: (col.s + off0) * perPx, v: d0 };
+    const E1 = { x: e1.x, y: e1.y, u: (col.s + off1) * perPx, v: d1 };
+    texturedTriangle(ctx, pattern, tw, th, B0, B1, E1);
+    texturedTriangle(ctx, pattern, tw, th, B0, E1, E0);
+  }
+}
+
+// 纹理缩到 1×1 取均色，作为裁剪区的兜底底色（结果缓存到纹理对象上）
+export function textureBaseColor(texture) {
+  if (texture._baseColor) return texture._baseColor;
+  const c = document.createElement('canvas');
+  c.width = 1;
+  c.height = 1;
+  const m = c.getContext('2d', { willReadFrequently: true });
+  m.drawImage(texture.image, 0, 0, 1, 1);
+  const d = m.getImageData(0, 0, 1, 1).data;
+  texture._baseColor = `rgb(${d[0]}, ${d[1]}, ${d[2]})`;
+  return texture._baseColor;
 }
 
 function texturedTriangle(ctx, pattern, tw, th, p0, p1, p2) {
