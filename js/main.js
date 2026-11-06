@@ -29,7 +29,7 @@ const state = {
   width: 'normal',
   endLeft: 'wave',
   endRight: 'wave',
-  fold: 'one',
+  fold: 'none',
   bump: 'none',
 };
 
