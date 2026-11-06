@@ -401,7 +401,7 @@ function localK(tape, s) {
 function bumpPoints(tape, bump) {
   if (bump.kind !== 'corner') {
     if (!bump.poly) return [];
-    return jitterPts(bump.poly.map(p => pointAt(tape, p.s, p.v)), 0.5, 2.9);
+    return jitterPts(bump.poly.map(p => pointAt(tape, p.s, p.v)), 0.8, 2.9);
   }
 
   const STEPS = 12;
@@ -417,7 +417,7 @@ function bumpPoints(tape, bump) {
     }
   }
   const poly = [{ s: bump.apex.s, v: bump.apex.v }, ...legs[0], ...legs[1].reverse()];
-  return jitterPts(poly.map(p => pointAt(tape, p.s, p.v)), 0.5, 1.3);
+  return jitterPts(poly.map(p => pointAt(tape, p.s, p.v)), 0.8, 1.3);
 }
 
 // 轮廓点沿法线加 ±amp 的低频平滑抖动（非逐点随机），去掉完美多边形的塑料感
@@ -463,11 +463,11 @@ function directionalBand(ctx, path, bbox, { width, color, blur, flip }) {
   const g = o.createLinearGradient(bbox.x0, bbox.y0, bbox.x1, bbox.y1);
   if (flip) {
     g.addColorStop(0, 'rgba(0, 0, 0, 1)');
-    g.addColorStop(0.45, 'rgba(0, 0, 0, 0.3)');
+    g.addColorStop(0.5, 'rgba(0, 0, 0, 0.4)');
     g.addColorStop(1, 'rgba(0, 0, 0, 0)');
   } else {
     g.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    g.addColorStop(0.55, 'rgba(0, 0, 0, 0.3)');
+    g.addColorStop(0.5, 'rgba(0, 0, 0, 0.4)');
     g.addColorStop(1, 'rgba(0, 0, 0, 1)');
   }
   o.fillStyle = g;
@@ -492,13 +492,13 @@ function drawBump(ctx, tape, bump, texture, crease) {
   // 1) 接触影：极短、极淡，只朝右下溢出一点点
   ctx.save();
   if (supportsFilter) {
-    ctx.filter = 'blur(2px)';
-    ctx.fillStyle = 'rgba(42, 34, 23, 0.07)';
+    ctx.filter = 'blur(2.5px)';
+    ctx.fillStyle = 'rgba(42, 34, 23, 0.12)';
     ctx.translate(1, 1.5);
     ctx.fill(raised);
     ctx.filter = 'none';
   } else {
-    ctx.shadowColor = 'rgba(42, 34, 23, 0.09)';
+    ctx.shadowColor = 'rgba(42, 34, 23, 0.14)';
     ctx.shadowBlur = 2;
     ctx.shadowOffsetX = 1;
     ctx.shadowOffsetY = 1.5;
@@ -514,7 +514,7 @@ function drawBump(ctx, tape, bump, texture, crease) {
   ctx.clip(raised);
   drawMeshTexture(ctx, tape, texture);
   drawCreases(ctx, tape, crease, texture);
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.restore();
 
@@ -522,7 +522,7 @@ function drawBump(ctx, tape, bump, texture, crease) {
   ctx.save();
   ctx.clip(raised);
   if (supportsFilter) ctx.filter = 'blur(0.8px)';
-  ctx.strokeStyle = 'rgba(52, 42, 30, 0.13)';
+  ctx.strokeStyle = 'rgba(52, 42, 30, 0.20)';
   ctx.lineWidth = 3;
   ctx.lineJoin = 'round';
   ctx.stroke(raised);
@@ -537,6 +537,6 @@ function drawBump(ctx, tape, bump, texture, crease) {
     if (p.y > y1) y1 = p.y;
   }
   directionalBand(ctx, raised, { x0, y0, x1, y1 }, {
-    width: 2, color: 'rgba(48, 38, 26, 0.12)', blur: 0.6, flip: false,
+    width: 2, color: 'rgba(48, 38, 26, 0.18)', blur: 0.6, flip: false,
   });
 }
