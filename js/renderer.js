@@ -1,7 +1,8 @@
 // renderer.js —— 胶带渲染
-// 层次：柔和投影 → 连续纹理网格 → 折痕明暗 → 上下边缘的高光/暗线 → 轮廓
+// 层次：柔和投影 → 连续纹理网格 → 折痕（轻皱/揉皱/单斜翘）→ 端头微翘 → 凹凸 → 边缘厚度 → 轮廓
 
 import { buildTape } from './geometry.js';
+import { drawCreases } from './creases.js';
 
 const supportsFilter = (() => {
   const c = document.createElement('canvas').getContext('2d');
@@ -27,8 +28,7 @@ export function renderTape(ctx, W, H, params, texture) {
   ctx.clip(path);
   drawMeshTexture(ctx, tape, texture);
   drawSurfaceShading(ctx, tape);
-  drawFoldShading(ctx, tape, params, W, H);
-  drawEndShading(ctx, tape, params);
+  drawCreases(ctx, tape, params.crease);
   drawEndLiftLight(ctx, tape);
   drawBump(ctx, tape, params.bump, texture);
   drawEdgeBevel(ctx, tape);
@@ -299,73 +299,6 @@ function inflateTriangle(p0, p1, p2, dist) {
   return out;
 }
 
-// ---- 折痕：跨过胶带的暗带 + 折线上一道亮檐 ----
-function drawFoldShading(ctx, tape, params, W, H) {
-  const w = params.widthPx;
-
-  for (const f of tape.folds) {
-    const gx0 = f.x - f.t.x * w * 0.55;
-    const gy0 = f.y - f.t.y * w * 0.55;
-    const gx1 = f.x + f.t.x * w * 0.55;
-    const gy1 = f.y + f.t.y * w * 0.55;
-
-    const g = ctx.createLinearGradient(gx0, gy0, gx1, gy1);
-    g.addColorStop(0, 'rgba(52, 42, 30, 0)');
-    g.addColorStop(0.38, 'rgba(52, 42, 30, 0.14)');
-    g.addColorStop(0.5, 'rgba(52, 42, 30, 0.2)');
-    g.addColorStop(0.62, 'rgba(52, 42, 30, 0.08)');
-    g.addColorStop(1, 'rgba(52, 42, 30, 0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
-
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.26)';
-    ctx.lineWidth = Math.max(1, w * 0.012);
-    ctx.beginPath();
-    ctx.moveTo(f.x - f.n.x * w, f.y - f.n.y * w);
-    ctx.lineTo(f.x + f.n.x * w, f.y + f.n.y * w);
-    ctx.stroke();
-    ctx.restore();
-  }
-}
-
-// ---- 卷边 / 翘起：末端一段加暗或提亮 ----
-function drawEndShading(ctx, tape, params) {
-  const style = params.foldStyle;
-  if (style !== 'curl' && style !== 'lift') return;
-
-  const cols = tape.cols;
-  const total = tape.total;
-  const from = style === 'curl' ? 0.82 : 0.72;
-  let start = cols[cols.length - 1];
-  for (const col of cols) {
-    if (col.s / total >= from) { start = col; break; }
-  }
-  const end = cols[cols.length - 1];
-
-  const g = ctx.createLinearGradient(start.cR.x, start.cR.y, end.cR.x, end.cR.y);
-  if (style === 'curl') {
-    g.addColorStop(0, 'rgba(38, 30, 20, 0)');
-    g.addColorStop(1, 'rgba(38, 30, 20, 0.42)');
-  } else {
-    g.addColorStop(0, 'rgba(255, 255, 255, 0)');
-    g.addColorStop(0.5, 'rgba(255, 255, 255, 0.16)');
-    g.addColorStop(1, 'rgba(255, 255, 255, 0.34)');
-  }
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-
-  // 末端边缘：卷边压一道暗线，翘起加一条亮边
-  ctx.save();
-  ctx.lineWidth = Math.max(1, params.widthPx * 0.012);
-  ctx.strokeStyle = style === 'curl' ? 'rgba(30, 24, 16, 0.5)' : 'rgba(255, 255, 255, 0.5)';
-  ctx.beginPath();
-  ctx.moveTo(end.top.x, end.top.y);
-  ctx.lineTo(end.bot.x, end.bot.y);
-  ctx.stroke();
-  ctx.restore();
-}
-
 // ---- 凹凸：把 (s, v) 比例转成画布坐标 ----
 // s 是弧长比例 [0,1]，v 是宽度方向比例 [0=上边,1=下边]。
 function colAt(tape, s) {
@@ -512,14 +445,14 @@ function drawBump(ctx, tape, bump, texture) {
   if (supportsFilter) {
     ctx.filter = 'blur(2px)';
     ctx.fillStyle = 'rgba(42, 34, 23, 0.07)';
-    ctx.translate(1.2, 1.6);
+    ctx.translate(1, 1.5);
     ctx.fill(raised);
     ctx.filter = 'none';
   } else {
     ctx.shadowColor = 'rgba(42, 34, 23, 0.09)';
     ctx.shadowBlur = 2;
-    ctx.shadowOffsetX = 1.2;
-    ctx.shadowOffsetY = 1.6;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 1.5;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.001)';
     ctx.fill(raised);
   }

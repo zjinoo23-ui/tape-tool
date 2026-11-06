@@ -1,63 +1,9 @@
 // geometry.js —— 胶带路径与网格
-// 胶带 = 一条连续折线，不是分段拼接：
+// 胶带是一条水平直线：折痕效果全部为表面绘制，不再弯折路径。
 // 沿路径取等距列，每列给出中心点 c、切线 t、法线 n、半宽 half，
-// 相邻两列组成四边形，纹理坐标 u 只由累计弧长决定 —— 所以折点处天然连续。
+// 相邻两列组成四边形，纹理坐标 u 只由累计弧长决定。
 
 export const DEG = Math.PI / 180;
-
-const clamp01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
-
-function smoothstep(t) {
-  t = clamp01(t);
-  return t * t * (3 - 2 * t);
-}
-
-function norm(v) {
-  const l = Math.hypot(v.x, v.y) || 1;
-  return { x: v.x / l, y: v.y / l };
-}
-
-// 折痕样式 → 折线控制点（本地坐标，胶带沿 +x 从 0 排到 L）
-function polylineFor(style, L) {
-  switch (style) {
-    case 'one': {
-      const a = 16 * DEG;
-      const p1 = { x: L * 0.5, y: 0 };
-      return [
-        { x: 0, y: 0 },
-        p1,
-        { x: p1.x + Math.cos(a) * L * 0.5, y: p1.y + Math.sin(a) * L * 0.5 },
-      ];
-    }
-    case 'two': {
-      const a = 14 * DEG;
-      const p1 = { x: L * 0.32, y: 0 };
-      const p2 = { x: p1.x + Math.cos(a) * L * 0.36, y: p1.y + Math.sin(a) * L * 0.36 };
-      const p3 = { x: p2.x + Math.cos(-a * 0.8) * L * 0.32, y: p2.y + Math.sin(-a * 0.8) * L * 0.32 };
-      return [{ x: 0, y: 0 }, p1, p2, p3];
-    }
-    case 'curl': {
-      const a = 34 * DEG;
-      const p1 = { x: L * 0.74, y: 0 };
-      return [
-        { x: 0, y: 0 },
-        p1,
-        { x: p1.x + Math.cos(a) * L * 0.26, y: p1.y + Math.sin(a) * L * 0.26 },
-      ];
-    }
-    case 'lift': {
-      const a = -20 * DEG;
-      const p1 = { x: L * 0.66, y: 0 };
-      return [
-        { x: 0, y: 0 },
-        p1,
-        { x: p1.x + Math.cos(a) * L * 0.34, y: p1.y + Math.sin(a) * L * 0.34 },
-      ];
-    }
-    default:
-      return [{ x: 0, y: 0 }, { x: L, y: 0 }];
-  }
-}
 
 // 端头轮廓：d 是「从上边缘到下边缘」的比例，返回端面沿路径方向的偏移量
 function endOffset(style, d, w, salt) {
@@ -82,7 +28,6 @@ function hash(x) {
  * @param {object} opts
  * @param {number} opts.widthPx 胶带宽度（像素）
  * @param {number} opts.lengthPx 胶带长度（像素）
- * @param {string} opts.foldStyle 折痕样式
  * @param {string} opts.endLeft 左端样式
  * @param {string} opts.endRight 右端样式
  * @param {number} opts.tiltDeg 倾斜角（度）
@@ -92,79 +37,29 @@ function hash(x) {
  */
 export function buildTape(opts) {
   const {
-    widthPx, lengthPx, foldStyle, endLeft, endRight, tiltDeg,
+    widthPx, lengthPx, endLeft, endRight, tiltDeg,
     centerX, centerY, seed = 0, step = 16,
   } = opts;
 
-  const L = lengthPx;
-  const poly = polylineFor(foldStyle, L);
-
-  const segs = [];
-  let total = 0;
-  for (let i = 0; i < poly.length - 1; i++) {
-    const a = poly[i];
-    const b = poly[i + 1];
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const len = Math.hypot(dx, dy);
-    segs.push({ a, b, len, dir: { x: dx / len, y: dy / len }, start: total });
-    total += len;
-  }
-
-  // ---- 取列 ----
-  const cols = [];
-  const foldCols = [];
-  const s0 = segs[0];
-  cols.push({
-    s: 0,
-    c: { x: s0.a.x, y: s0.a.y },
-    t: s0.dir,
-    n: { x: -s0.dir.y, y: s0.dir.x },
-    miter: 1,
-  });
-
-  for (let i = 0; i < segs.length; i++) {
-    const seg = segs[i];
-    const count = Math.max(2, Math.ceil(seg.len / step));
-    for (let k = 1; k <= count; k++) {
-      const f = k / count;
-      const c = {
-        x: seg.a.x + seg.dir.x * seg.len * f,
-        y: seg.a.y + seg.dir.y * seg.len * f,
-      };
-      const s = seg.start + seg.len * f;
-
-      if (k === count && i < segs.length - 1) {
-        // 折点列：法线取两侧法线的角平分线，并按 1/cos 补长（斜接），
-        // 这样内外两条边都贴着原直线延伸，不会裂开。
-        const d2 = segs[i + 1].dir;
-        const t = norm({ x: seg.dir.x + d2.x, y: seg.dir.y + d2.y });
-        const n1 = { x: -seg.dir.y, y: seg.dir.x };
-        const n2 = { x: -d2.y, y: d2.x };
-        const bis = norm({ x: n1.x + n2.x, y: n1.y + n2.y });
-        const cosHalf = Math.max(0.4, n1.x * bis.x + n1.y * bis.y);
-        cols.push({ s, c, t, n: bis, miter: 1 / cosHalf });
-        foldCols.push(cols.length - 1);
-      } else {
-        const n = { x: -seg.dir.y, y: seg.dir.x };
-        cols.push({ s, c, t: seg.dir, n, miter: 1 });
-      }
-    }
-  }
-
-  // ---- 宽度（卷边 / 翘起在末端收一点） ----
+  const total = lengthPx;
+  const dir = { x: 1, y: 0 };
+  const n = { x: 0, y: 1 };
   const halfBase = widthPx / 2;
-  for (const col of cols) {
-    const u = col.s / total;
-    let wmul = 1;
-    if (foldStyle === 'curl' && u > 0.84) {
-      wmul = 1 - 0.34 * smoothstep((u - 0.84) / 0.16);
-    } else if (foldStyle === 'lift' && u > 0.88) {
-      wmul = 1 - 0.2 * smoothstep((u - 0.88) / 0.12);
-    }
-    col.half = halfBase * wmul * col.miter;
-    col.top = { x: col.c.x - col.n.x * col.half, y: col.c.y - col.n.y * col.half };
-    col.bot = { x: col.c.x + col.n.x * col.half, y: col.c.y + col.n.y * col.half };
+
+  // ---- 取列（直线，等距） ----
+  const cols = [];
+  const count = Math.max(2, Math.ceil(total / step));
+  for (let k = 0; k <= count; k++) {
+    const s = (total * k) / count;
+    cols.push({
+      s,
+      c: { x: s, y: 0 },
+      t: dir,
+      n,
+      half: halfBase,
+      top: { x: s, y: -halfBase },
+      bot: { x: s, y: halfBase },
+    });
   }
 
   // ---- 整条旋转 + 居中 ----
@@ -200,11 +95,6 @@ export function buildTape(opts) {
     col.bot.x += dx; col.bot.y += dy;
     col.cR.x += dx; col.cR.y += dy;
   }
-
-  const folds = foldCols.map(i => {
-    const col = cols[i];
-    return { x: col.cR.x, y: col.cR.y, t: col.tR, n: col.nR, s: col.s, u: col.s / total };
-  });
 
   // ---- 端头轮廓 ----
   const N = 24;
@@ -256,7 +146,6 @@ export function buildTape(opts) {
     bot,
     leftEnd,
     rightEnd,
-    folds,
     outline,
     total,
     widthPx,

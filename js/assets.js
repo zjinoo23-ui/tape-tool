@@ -29,3 +29,17 @@ export function getTextures() {
 export function getTexture(key) {
   return images.find(t => t.key === key) || images[0] || null;
 }
+
+// ---- 揉皱纹理（预烘焙 PNG，加载失败则「揉皱」退化为无折痕） ----
+const crumples = [];
+
+export async function loadCrumples(paths) {
+  const results = await Promise.all(paths.map(loadImage));
+  crumples.length = 0;
+  for (const img of results) if (img) crumples.push(img);
+  return crumples;
+}
+
+export function getCrumples() {
+  return crumples;
+}

@@ -1,7 +1,7 @@
 // config.js —— 常量、素材清单与默认参数
 // 版本号：后续升级只改这一处
 
-export const VERSION = 'v0.6.0';
+export const VERSION = 'v0.7.0';
 
 // 渲染画布（导出时按内容边缘再裁剪，这里的边距只影响取景）
 export const CANVAS = { w: 1600, h: 1120 };
@@ -27,12 +27,18 @@ export const END_STYLES = {
 };
 
 export const FOLD_STYLES = {
-  none: '无',
-  one: '折一下',
-  two: '折两下',
-  curl: '卷边',
-  lift: '翘起',
+  smooth: '平滑',
+  light: '轻皱',
+  crumple: '揉皱',
+  skew: '单斜翘',
 };
+
+// 揉皱纹理：预烘焙的透明底 PNG（tools/bake-crumple.html 生成），运行时随机轮换
+export const CRUMPLE_TEXTURES = [
+  'assets/folds/crumple-1.png',
+  'assets/folds/crumple-2.png',
+  'assets/folds/crumple-3.png',
+];
 
 // 凹凸：胶带局部隆起的预设形状，模拟胶带压在纸上的别的东西（拍立得、卡片）上。
 // poly 用 (s, v) 描述，s 为沿胶带长度方向的弧长比例，v 为宽度方向比例 [0=上边,1=下边]，
@@ -61,6 +67,5 @@ export const TEXTURES = [
   { key: 'charcoal', name: '墨灰',     path: 'assets/textures/charcoal.png' },
 ];
 
-// 端头件与折痕件目前全部由代码生成（程序化），
-// 后续补图时可在 assets/ends/、assets/folds/ 放 PNG，再在渲染层接进来。
+// 端头件全部由代码生成（程序化）；揉皱纹理在 assets/folds/ 下，烘焙工具见 tools/
 export const SEED = 7;

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<!-- 揉皱纹理烘焙页：用无头浏览器打开后，把 3 张 2048×512 透明底 PNG 挂到 window.baked 上。
+     用法见 /tmp/pptr/bake.mjs（或任何 puppeteer 脚本）：读取 window.baked 存到 assets/folds/。 -->
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>bake crumple textures</title></head>
+<body>
+<canvas id="c" width="2048" height="512"></canvas>
+<script type="module">
+import { bakeCrumplePattern } from '../js/creases.js';
+
+const seeds = [101, 202, 303];
+const c = document.getElementById('c');
+window.baked = [];
+for (const s of seeds) {
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  bakeCrumplePattern(ctx, c.width, c.height, s);
+  window.baked.push(c.toDataURL('image/png'));
+}
+window.bakeDone = true;
+</script>
+</body>
+</html>
