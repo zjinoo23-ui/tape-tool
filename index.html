@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#F4EEDF">
+  <title>胶带素材 · Tape Studio</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <span class="app-version" id="appVersion"></span>
+
+    <header class="app-header">
+      <h1 class="app-title">胶带素材</h1>
+      <span class="app-subtitle">TAPE STUDIO</span>
+    </header>
+
+    <main class="app-main">
+      <!-- 预览：透明底棋盘格 -->
+      <section class="preview-section">
+        <div class="preview-sheet">
+          <div class="preview-wrapper">
+            <canvas id="previewCanvas"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <section class="controls-section">
+        <!-- 1. 纹理 -->
+        <div class="paper-card">
+          <button type="button" class="card-title" aria-expanded="true">
+            <span class="card-sign" aria-hidden="true"></span>
+            纹理
+          </button>
+          <div class="card-body">
+            <div class="card-body-inner">
+              <!-- 主题选项卡：横向拖动、无限循环 -->
+              <div class="theme-tabs" id="themeTabs">
+                <div class="theme-tabs-track" id="themeTabsTrack"></div>
+              </div>
+
+              <!-- 图标墙：3×3，素材未齐留空占位 -->
+              <div class="motif-wall" id="motifWall"></div>
+
+              <!-- 纹样组：整套配色 -->
+              <div class="palette-row" id="paletteRow" hidden></div>
+
+              <!-- 纯色组：HSV 取色盘（替换图标墙位置） -->
+              <div class="color-picker" id="colorPicker" hidden>
+                <canvas class="sv-panel" id="svPanel"></canvas>
+                <canvas class="hue-bar" id="hueBar"></canvas>
+                <div class="hex-row">
+                  <span class="hex-label">HEX</span>
+                  <input type="text" id="hexInput" class="hex-input" maxlength="7" spellcheck="false">
+                  <span class="hex-preview" id="hexPreview"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. 形态 -->
+        <div class="paper-card">
+          <button type="button" class="card-title" aria-expanded="true">
+            <span class="card-sign" aria-hidden="true"></span>
+            形态
+          </button>
+          <div class="card-body">
+            <div class="card-body-inner">
+              <div class="control-group">
+                <div class="label-row">
+                  <label class="control-label" for="lengthSlider">长度</label>
+                  <span id="lengthValue" class="value-label">9.0 cm</span>
+                </div>
+                <input type="range" id="lengthSlider" class="slider" min="4" max="14" value="9" step="0.5">
+                <p class="group-hint">按现实手帐尺度的示意值，随手剪一截常见 5–10cm</p>
+              </div>
+
+              <div class="control-group">
+                <span class="control-label">宽度</span>
+                <div class="segmented-control" data-seg="width">
+                  <span class="seg-indicator" aria-hidden="true"></span>
+                  <button type="button" class="seg-btn" data-value="thin">细款<span class="seg-sub">1.5cm</span></button>
+                  <button type="button" class="seg-btn active" data-value="normal">常规<span class="seg-sub">2.0cm</span></button>
+                  <button type="button" class="seg-btn" data-value="wide">宽版<span class="seg-sub">3.0cm</span></button>
+                </div>
+              </div>
+
+              <div class="control-group">
+                <div class="label-row">
+                  <label class="control-label" for="opacitySlider">透明度</label>
+                  <span id="opacityValue" class="value-label">100%</span>
+                </div>
+                <input type="range" id="opacitySlider" class="slider" min="15" max="100" value="100" step="5">
+                <p class="group-hint">调低后底下的纸和格线会透出来，像和纸胶带</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. 端头 -->
+        <div class="paper-card">
+          <button type="button" class="card-title" aria-expanded="true">
+            <span class="card-sign" aria-hidden="true"></span>
+            端头
+          </button>
+          <div class="card-body">
+            <div class="card-body-inner">
+              <div class="control-group">
+                <span class="control-label">左端</span>
+                <div class="segmented-control" data-seg="endLeft">
+                  <span class="seg-indicator" aria-hidden="true"></span>
+                  <button type="button" class="seg-btn" data-value="straight">直边</button>
+                  <button type="button" class="seg-btn active" data-value="wave">波浪</button>
+                  <button type="button" class="seg-btn" data-value="tear">手撕</button>
+                </div>
+              </div>
+              <div class="control-group">
+                <span class="control-label">右端</span>
+                <div class="segmented-control" data-seg="endRight">
+                  <span class="seg-indicator" aria-hidden="true"></span>
+                  <button type="button" class="seg-btn" data-value="straight">直边</button>
+                  <button type="button" class="seg-btn active" data-value="wave">波浪</button>
+                  <button type="button" class="seg-btn" data-value="tear">手撕</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. 效果：折痕 + 凹凸（凹凸暂留位置） -->
+        <div class="paper-card">
+          <button type="button" class="card-title" aria-expanded="true">
+            <span class="card-sign" aria-hidden="true"></span>
+            效果
+          </button>
+          <div class="card-body">
+            <div class="card-body-inner">
+              <div class="control-group">
+                <span class="control-label">折痕</span>
+                <div class="chip-group" data-chip="fold">
+                  <button type="button" class="chip active" data-value="smooth">平滑</button>
+                  <button type="button" class="chip" data-value="light">轻皱</button>
+                  <button type="button" class="chip" data-value="crumple">揉皱</button>
+                  <button type="button" class="chip" data-value="skew">斜痕</button>
+                </div>
+              </div>
+
+              <div class="control-group">
+                <span class="control-label">凹凸</span>
+                <div class="chip-group" data-chip="bump">
+                  <button type="button" class="chip active" data-value="none">无</button>
+                  <button type="button" class="chip" data-value="leftHalf">左半边</button>
+                  <button type="button" class="chip" data-value="lowerHalf">下半边</button>
+                  <button type="button" class="chip" data-value="centerLower">中下边</button>
+                  <button type="button" class="chip" data-value="bottomPeak">底三角</button>
+                  <button type="button" class="chip" data-value="cornerOut">露角</button>
+                </div>
+                <p class="group-hint">让胶带局部看起来有厚度，示意贴在卡片、拍立得边缘时的隆起感</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 下载 -->
+        <div class="action-group">
+          <button id="downloadBtn" class="btn btn-primary">下载透明 PNG</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <footer class="site-footer">
+    <span>贾斯伯还是吉努都可以</span>
+  </footer>
+
+  <!-- 手机端：大图预览，长按保存 -->
+  <div class="modal" id="saveModal" hidden>
+    <div class="modal-sheet" role="dialog" aria-modal="true" aria-label="保存图片">
+      <button type="button" class="modal-close" id="saveModalClose" aria-label="关闭">×</button>
+      <p class="modal-hint">长按图片保存到相册</p>
+      <img id="saveModalImg" alt="生成的透明胶带" />
+    </div>
+  </div>
+
+  <canvas id="exportCanvas" style="display:none;"></canvas>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

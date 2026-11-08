@@ -1,0 +1,21 @@
+# System files
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+.uploads/
+
+# 本地生成的示例图 / 截图，不进仓库
+samples/
+.screenshots/
+
+# 构建依赖
+node_modules/
