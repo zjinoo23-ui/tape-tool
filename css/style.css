@@ -363,14 +363,35 @@ button, input {
 
 /* ===== 纹理卡片：主题滚轮（横向、无限循环、居中吸附） ===== */
 .theme-tabs {
+  position: relative;
   margin: 0 -16px 12px;
   padding: 0 16px;
   min-width: 0;
   max-width: none;
   contain: inline-size;
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%);
-  mask-image: linear-gradient(to right, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%);
+}
+
+/* 用固定渐隐层代替滚动区域的 mask，滚动时不用每帧重新合成蒙版 */
+.theme-tabs::before,
+.theme-tabs::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 26px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.theme-tabs::before {
+  left: 0;
+  background: linear-gradient(90deg, var(--card) 0%, rgba(228, 218, 194, 0) 100%);
+}
+
+.theme-tabs::after {
+  right: 0;
+  background: linear-gradient(270deg, var(--card) 0%, rgba(228, 218, 194, 0) 100%);
 }
 
 .theme-tabs-track {
@@ -407,7 +428,7 @@ button, input {
   white-space: nowrap;
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-  transition: background-color 0.16s, border-color 0.16s, color 0.16s;
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
 }
 
 .theme-tab:hover {

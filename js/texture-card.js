@@ -67,71 +67,60 @@ export function initTextureCard({ onChange }) {
     for (const t of TAPE_THEMES) {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'theme-tab' + (t.key === state.theme ? ' active' : '');
+      b.className = 'theme-tab';
       b.dataset.key = t.key;
       b.textContent = t.name;
       tabsTrack.appendChild(b);
     }
   }
 
-  // 一份主题的宽度：第 2 份第一个 tab 与第 1 份第一个 tab 的间距
-  const setWidth = () => {
-    const tabs = tabsTrack.querySelectorAll('.theme-tab');
-    const n = TAPE_THEMES.length;
-    if (tabs.length < n * 2) return 0;
-    return tabs[n].offsetLeft - tabs[0].offsetLeft;
-  };
+  // 主题宽度和每个 tab 的中心只量一次，滚动时不再反复读布局，动画更稳
+  let tabMeta = [];
+  let copyWidth = 0;
+  let viewWidth = 0;
 
-  function normalizeScroll() {
-    if (snapping) return;
-    const w = setWidth();
-    if (w <= 0) return;
-    if (tabsTrack.scrollLeft < w) tabsTrack.scrollLeft += w;
-    else if (tabsTrack.scrollLeft >= w * 2) tabsTrack.scrollLeft -= w;
+  function measureTabs() {
+    const tabs = [...tabsTrack.querySelectorAll('.theme-tab')];
+    if (!tabs.length) return;
+    tabMeta = tabs.map(el => ({
+      el,
+      center: el.offsetLeft + el.offsetWidth / 2,
+    }));
+    viewWidth = tabsTrack.clientWidth;
+    const n = TAPE_THEMES.length;
+    copyWidth = tabs.length > n ? tabs[n].offsetLeft - tabs[0].offsetLeft : 0;
   }
 
-  function nearestTab() {
-    const center = tabsTrack.scrollLeft + tabsTrack.clientWidth / 2;
+  function normalizeScroll() {
+    if (snapping || copyWidth <= 0) return;
+    if (tabsTrack.scrollLeft < copyWidth) tabsTrack.scrollLeft += copyWidth;
+    else if (tabsTrack.scrollLeft >= copyWidth * 2) tabsTrack.scrollLeft -= copyWidth;
+  }
+
+  function nearestMeta(center) {
     let best = null;
     let bestDist = Infinity;
-    for (const el of tabsTrack.querySelectorAll('.theme-tab')) {
-      const d = Math.abs(el.offsetLeft + el.offsetWidth / 2 - center);
+    for (const m of tabMeta) {
+      const d = Math.abs(m.center - center);
       if (d < bestDist) {
         bestDist = d;
-        best = el;
+        best = m;
       }
     }
     return best;
   }
 
-  function highlightAt(scrollLeft) {
-    const center = scrollLeft + tabsTrack.clientWidth / 2;
-    let best = null;
-    let bestDist = Infinity;
-    for (const el of tabsTrack.querySelectorAll('.theme-tab')) {
-      const d = Math.abs(el.offsetLeft + el.offsetWidth / 2 - center);
-      if (d < bestDist) {
-        bestDist = d;
-        best = el;
-      }
-    }
-    if (!best) return;
-    tabsTrack.querySelectorAll('.theme-tab').forEach(el => {
-      el.classList.toggle('active', el === best);
-    });
+  let activeTab = null;
+  function setActiveTab(el) {
+    if (!el || el === activeTab) return;
+    if (activeTab) activeTab.classList.remove('active');
+    activeTab = el;
+    activeTab.classList.add('active');
   }
 
   function highlightCentered() {
-    highlightAt(tabsTrack.scrollLeft);
-  }
-
-  // 同一个主题在 3 份拷贝里有 3 个等价位置，选离当前位置最近的那个，避免滚轮突然转一整圈
-  function nearestEquivalent(left) {
-    const w = setWidth();
-    if (w <= 0) return left;
-    while (left - tabsTrack.scrollLeft > w / 2) left -= w;
-    while (tabsTrack.scrollLeft - left > w / 2) left += w;
-    return left;
+    const meta = nearestMeta(tabsTrack.scrollLeft + viewWidth / 2);
+    setActiveTab(meta && meta.el);
   }
 
   let snapping = false;
@@ -141,41 +130,65 @@ export function initTextureCard({ onChange }) {
     snapping = true;
     clearTimeout(snapFinish);
     tabsTrack.scrollTo({ left, behavior: 'smooth' });
-    // 等滚动动画结束后再归一化；此时画面内容相同，跳变不可见
-    snapFinish = setTimeout(() => {
-      snapping = false;
-      normalizeScroll();
-    }, 450);
+    // 动画期间不做归一化，等滚完再允许下一次换算
+    snapFinish = setTimeout(() => { snapping = false; }, 500);
+  }
+
+  function targetFor(key) {
+    const current = tabsTrack.scrollLeft;
+    let best = null;
+    let bestDist = Infinity;
+    for (const m of tabMeta) {
+      if (m.el.dataset.key !== key) continue;
+      const d = Math.abs(m.center - viewWidth / 2 - current);
+      if (d < bestDist) {
+        bestDist = d;
+        best = m;
+      }
+    }
+    return best;
   }
 
   function centerTab(key, smooth) {
-    const el = tabsTrack.querySelectorAll(`.theme-tab[data-key="${key}"]`)[1]
-      || tabsTrack.querySelector(`.theme-tab[data-key="${key}"]`);
-    if (!el) return;
-    const left = nearestEquivalent(el.offsetLeft + el.offsetWidth / 2 - tabsTrack.clientWidth / 2);
+    snapping = false;
+    clearTimeout(snapFinish);
+    normalizeScroll();
+    const target = targetFor(key);
+    if (!target) return;
+    const left = target.center - viewWidth / 2;
     if (smooth) smoothScrollTo(left);
     else tabsTrack.scrollLeft = left;
-    highlightAt(left);
+    setActiveTab(target.el);
   }
 
-  function applyTheme(key, { center = false, smooth = false } = {}) {
+  let commitTimer = 0;
+
+  function commitTheme() {
+    syncGroupUI();
+    buildMotifWall();
+    onChange();
+  }
+
+  function applyTheme(key, { center = false, smooth = false, defer = false } = {}) {
     const changed = key !== state.theme;
     state.theme = key;
     if (center) centerTab(key, smooth);
-    else highlightCentered();
-    if (changed) {
-      syncGroupUI();
-      buildMotifWall();
-      onChange();
-    }
+    else if (!snapping) highlightCentered();
+    if (!changed) return;
+    // 滚轮还在动时先不重建图标墙、不触发预览渲染，避免动画中间掉帧
+    clearTimeout(commitTimer);
+    if (smooth || defer) commitTimer = setTimeout(commitTheme, 360);
+    else commitTheme();
   }
 
   function snapToNearest() {
-    const tab = nearestTab();
-    if (!tab) return;
-    const left = nearestEquivalent(tab.offsetLeft + tab.offsetWidth / 2 - tabsTrack.clientWidth / 2);
+    if (!tabMeta.length) return;
+    normalizeScroll();
+    const meta = nearestMeta(tabsTrack.scrollLeft + viewWidth / 2);
+    if (!meta) return;
+    const left = meta.center - viewWidth / 2;
     if (Math.abs(tabsTrack.scrollLeft - left) > 1) smoothScrollTo(left);
-    if (tab.dataset.key !== state.theme) applyTheme(tab.dataset.key);
+    if (meta.el.dataset.key !== state.theme) applyTheme(meta.el.dataset.key, { defer: true });
   }
 
   let scrollIdle = 0;
@@ -185,16 +198,16 @@ export function initTextureCard({ onChange }) {
     if (!scrollRaf) {
       scrollRaf = requestAnimationFrame(() => {
         scrollRaf = 0;
-        highlightCentered();
+        // 程序化滑动时保持目标主题高亮，避免中途闪过其他主题
+        if (!snapping) highlightCentered();
       });
     }
     clearTimeout(scrollIdle);
     scrollIdle = setTimeout(() => {
       if (snapping) return;
-      normalizeScroll();
       snapToNearest();
-    }, 160);
-  });
+    }, 140);
+  }, { passive: true });
 
   // 拖动滚动 + 点击区分
   let drag = null;
@@ -214,7 +227,7 @@ export function initTextureCard({ onChange }) {
       tabsTrack.classList.add('dragging');
     }
     if (drag.moved) tabsTrack.scrollLeft = drag.left - dx;
-  });
+  }, { passive: true });
   window.addEventListener('pointerup', () => {
     const moved = drag && drag.moved;
     drag = null;
@@ -419,6 +432,15 @@ export function initTextureCard({ onChange }) {
 
   window.addEventListener('resize', sizeAndDrawPicker);
 
+  let wheelResize = 0;
+  window.addEventListener('resize', () => {
+    clearTimeout(wheelResize);
+    wheelResize = setTimeout(() => {
+      measureTabs();
+      centerTab(state.theme, false);
+    }, 120);
+  });
+
   // ===== 分组控件切换 =====
   function syncGroupUI() {
     const group = themeOf(state.theme).group;
@@ -445,7 +467,8 @@ export function initTextureCard({ onChange }) {
   hexInput.value = state.color;
   hexPreview.style.background = state.color;
   requestAnimationFrame(() => {
-    tabsTrack.scrollLeft = setWidth();
+    measureTabs();
+    tabsTrack.scrollLeft = copyWidth + viewWidth / 2;
     centerTab(state.theme, false);
   });
 
