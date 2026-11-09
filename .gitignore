@@ -19,3 +19,7 @@ samples/
 
 # 构建依赖
 node_modules/
+
+# 单文件构建产物 / 分享包：只本地交付，不进仓库
+tape-studio-single.html
+.trae-html-share-packages/
