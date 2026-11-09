@@ -361,19 +361,23 @@ button, input {
   color: var(--ink);
 }
 
-/* ===== 纹理卡片：主题选项卡（横向拖动、无限循环） ===== */
+/* ===== 纹理卡片：主题滚轮（横向、无限循环、居中吸附） ===== */
 .theme-tabs {
-  margin-bottom: 12px;
+  margin: 0 -16px 12px;
+  padding: 0 16px;
   min-width: 0;
-  max-width: 100%;
+  max-width: none;
   contain: inline-size;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%);
 }
 
 .theme-tabs-track {
   position: relative;
   display: flex;
-  gap: 6px;
-  padding: 2px 2px 4px;
+  gap: 8px;
+  padding: 2px 0 4px;
   overflow-x: auto;
   scrollbar-width: none;
   cursor: grab;
@@ -392,7 +396,7 @@ button, input {
 
 .theme-tab {
   flex: 0 0 auto;
-  padding: 7px 14px;
+  padding: 8px 16px;
   border: 1px solid var(--card-edge);
   border-radius: 999px;
   background: var(--panel);
@@ -417,17 +421,28 @@ button, input {
   font-weight: 700;
 }
 
-/* ===== 图标墙：3×3，squircle（圆角约边长 22%） ===== */
+/* ===== 图标墙：下凹选择区 + 3×3，squircle（圆角约边长 22%） ===== */
+.motif-well[hidden],
 .motif-wall[hidden],
 .palette-row[hidden],
 .color-picker[hidden] {
   display: none;
 }
 
+.motif-well {
+  padding: 14px;
+  border: 1px solid rgba(38, 38, 31, 0.1);
+  border-radius: 12px;
+  background: #DCD1B7;
+  box-shadow:
+    inset 0 2px 7px rgba(0, 0, 0, 0.12),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
 .motif-wall {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  gap: 14px 12px;
 }
 
 .motif-item {
@@ -477,7 +492,8 @@ button, input {
 }
 
 .texture-name {
-  margin-top: 4px;
+  min-height: 1.3em;
+  margin-top: 5px;
   max-width: 100%;
   overflow: hidden;
   font-size: 11px;
@@ -492,11 +508,11 @@ button, input {
   font-weight: 700;
 }
 
-/* ===== 纹样组：整套配色 ===== */
+/* ===== 纹样组：整套配色，6 套并排一行 ===== */
 .palette-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
   margin-top: 12px;
 }
 
@@ -504,10 +520,11 @@ button, input {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
-  padding: 8px 10px;
+  min-width: 0;
+  gap: 4px;
+  padding: 6px 4px;
   border: 1px solid var(--card-edge);
-  border-radius: 10px;
+  border-radius: 9px;
   background: var(--panel);
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
@@ -525,21 +542,24 @@ button, input {
 
 .palette-dots {
   display: flex;
-  gap: 4px;
+  gap: 2px;
 }
 
 .palette-dot {
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   box-shadow: inset 0 0 0 1px rgba(38, 38, 31, 0.15);
 }
 
 .palette-name {
-  font-size: 11px;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 10px;
   line-height: 1.3;
   color: rgba(38, 38, 31, 0.7);
   white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .palette-item.active .palette-name {
@@ -1029,6 +1049,19 @@ button, input {
 
   .card-title {
     min-height: 40px;
+  }
+
+  .palette-row {
+    gap: 5px;
+  }
+
+  .palette-item {
+    padding: 6px 2px;
+  }
+
+  .palette-dot {
+    width: 10px;
+    height: 10px;
   }
 
   .seg-btn {

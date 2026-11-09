@@ -44,6 +44,7 @@ function hsvToHex({ h, s, v }) {
 
 export function initTextureCard({ onChange }) {
   const tabsTrack = document.getElementById('themeTabsTrack');
+  const motifWell = document.getElementById('motifWell');
   const motifWall = document.getElementById('motifWall');
   const paletteRow = document.getElementById('paletteRow');
   const colorPicker = document.getElementById('colorPicker');
@@ -60,7 +61,7 @@ export function initTextureCard({ onChange }) {
   };
   let hsv = hexToHsv(state.color);
 
-  // ===== 主题选项卡：3 份拷贝拼成无限循环 =====
+  // ===== 主题滚轮：3 份拷贝拼成无限循环，滚动结束后吸附到中心 =====
   const COPIES = 3;
   for (let c = 0; c < COPIES; c++) {
     for (const t of TAPE_THEMES) {
@@ -73,40 +74,136 @@ export function initTextureCard({ onChange }) {
     }
   }
 
-  const setWidth = () => tabsTrack.scrollWidth / COPIES;
+  // 一份主题的宽度：第 2 份第一个 tab 与第 1 份第一个 tab 的间距
+  const setWidth = () => {
+    const tabs = tabsTrack.querySelectorAll('.theme-tab');
+    const n = TAPE_THEMES.length;
+    if (tabs.length < n * 2) return 0;
+    return tabs[n].offsetLeft - tabs[0].offsetLeft;
+  };
 
   function normalizeScroll() {
+    if (snapping) return;
     const w = setWidth();
     if (w <= 0) return;
     if (tabsTrack.scrollLeft < w) tabsTrack.scrollLeft += w;
     else if (tabsTrack.scrollLeft >= w * 2) tabsTrack.scrollLeft -= w;
   }
-  tabsTrack.addEventListener('scroll', normalizeScroll);
+
+  function nearestTab() {
+    const center = tabsTrack.scrollLeft + tabsTrack.clientWidth / 2;
+    let best = null;
+    let bestDist = Infinity;
+    for (const el of tabsTrack.querySelectorAll('.theme-tab')) {
+      const d = Math.abs(el.offsetLeft + el.offsetWidth / 2 - center);
+      if (d < bestDist) {
+        bestDist = d;
+        best = el;
+      }
+    }
+    return best;
+  }
+
+  function highlightAt(scrollLeft) {
+    const center = scrollLeft + tabsTrack.clientWidth / 2;
+    let best = null;
+    let bestDist = Infinity;
+    for (const el of tabsTrack.querySelectorAll('.theme-tab')) {
+      const d = Math.abs(el.offsetLeft + el.offsetWidth / 2 - center);
+      if (d < bestDist) {
+        bestDist = d;
+        best = el;
+      }
+    }
+    if (!best) return;
+    tabsTrack.querySelectorAll('.theme-tab').forEach(el => {
+      el.classList.toggle('active', el === best);
+    });
+  }
+
+  function highlightCentered() {
+    highlightAt(tabsTrack.scrollLeft);
+  }
+
+  // 同一个主题在 3 份拷贝里有 3 个等价位置，选离当前位置最近的那个，避免滚轮突然转一整圈
+  function nearestEquivalent(left) {
+    const w = setWidth();
+    if (w <= 0) return left;
+    while (left - tabsTrack.scrollLeft > w / 2) left -= w;
+    while (tabsTrack.scrollLeft - left > w / 2) left += w;
+    return left;
+  }
+
+  let snapping = false;
+  let snapFinish = 0;
+
+  function smoothScrollTo(left) {
+    snapping = true;
+    clearTimeout(snapFinish);
+    tabsTrack.scrollTo({ left, behavior: 'smooth' });
+    // 等滚动动画结束后再归一化；此时画面内容相同，跳变不可见
+    snapFinish = setTimeout(() => {
+      snapping = false;
+      normalizeScroll();
+    }, 450);
+  }
 
   function centerTab(key, smooth) {
     const el = tabsTrack.querySelectorAll(`.theme-tab[data-key="${key}"]`)[1]
       || tabsTrack.querySelector(`.theme-tab[data-key="${key}"]`);
     if (!el) return;
-    const left = el.offsetLeft + el.offsetWidth / 2 - tabsTrack.clientWidth / 2;
-    tabsTrack.scrollTo({ left, behavior: smooth ? 'smooth' : 'auto' });
+    const left = nearestEquivalent(el.offsetLeft + el.offsetWidth / 2 - tabsTrack.clientWidth / 2);
+    if (smooth) smoothScrollTo(left);
+    else tabsTrack.scrollLeft = left;
+    highlightAt(left);
   }
 
-  function selectTheme(key, { center = true, smooth = true } = {}) {
+  function applyTheme(key, { center = false, smooth = false } = {}) {
+    const changed = key !== state.theme;
     state.theme = key;
-    tabsTrack.querySelectorAll('.theme-tab').forEach(el => {
-      el.classList.toggle('active', el.dataset.key === key);
-    });
     if (center) centerTab(key, smooth);
-    syncGroupUI();
-    buildMotifWall();
-    onChange();
+    else highlightCentered();
+    if (changed) {
+      syncGroupUI();
+      buildMotifWall();
+      onChange();
+    }
   }
+
+  function snapToNearest() {
+    const tab = nearestTab();
+    if (!tab) return;
+    const left = nearestEquivalent(tab.offsetLeft + tab.offsetWidth / 2 - tabsTrack.clientWidth / 2);
+    if (Math.abs(tabsTrack.scrollLeft - left) > 1) smoothScrollTo(left);
+    if (tab.dataset.key !== state.theme) applyTheme(tab.dataset.key);
+  }
+
+  let scrollIdle = 0;
+  let scrollRaf = 0;
+  tabsTrack.addEventListener('scroll', () => {
+    normalizeScroll();
+    if (!scrollRaf) {
+      scrollRaf = requestAnimationFrame(() => {
+        scrollRaf = 0;
+        highlightCentered();
+      });
+    }
+    clearTimeout(scrollIdle);
+    scrollIdle = setTimeout(() => {
+      if (snapping) return;
+      normalizeScroll();
+      snapToNearest();
+    }, 160);
+  });
 
   // 拖动滚动 + 点击区分
   let drag = null;
   let suppressClick = false;
   tabsTrack.addEventListener('pointerdown', e => {
+    snapping = false;
+    clearTimeout(snapFinish);
     drag = { x: e.clientX, left: tabsTrack.scrollLeft, moved: false };
+    clearTimeout(scrollIdle);
   });
   window.addEventListener('pointermove', e => {
     if (!drag) return;
@@ -119,15 +216,20 @@ export function initTextureCard({ onChange }) {
     if (drag.moved) tabsTrack.scrollLeft = drag.left - dx;
   });
   window.addEventListener('pointerup', () => {
+    const moved = drag && drag.moved;
     drag = null;
     tabsTrack.classList.remove('dragging');
+    if (moved) {
+      clearTimeout(scrollIdle);
+      snapToNearest();
+    }
     // click 紧跟 pointerup 触发，给一点窗口期把这次 click 吞掉
     setTimeout(() => { suppressClick = false; }, 80);
   });
   tabsTrack.addEventListener('click', e => {
     if (suppressClick) return;
     const tab = e.target.closest('.theme-tab');
-    if (tab) selectTheme(tab.dataset.key);
+    if (tab) applyTheme(tab.dataset.key, { center: true, smooth: true });
   });
 
   // ===== 图标墙：3×3，真实胶带组放现有纹理，纹样组素材未到先留空 =====
@@ -147,16 +249,18 @@ export function initTextureCard({ onChange }) {
       icon.className = 'motif-icon';
       btn.appendChild(icon);
 
+      // 每个图标下都保留名称区域，空位也能和真实素材保持同样行高
+      const name = document.createElement('span');
+      name.className = 'texture-name';
+      btn.appendChild(name);
+
       if (tex) {
         const c = document.createElement('canvas');
         c.width = 96;
         c.height = 96;
         c.getContext('2d').drawImage(tex.image, 0, 0, 96, 96);
         icon.appendChild(c);
-        const name = document.createElement('span');
-        name.className = 'texture-name';
         name.textContent = tex.name;
-        btn.appendChild(name);
         if (tex.key === state.textureKey) btn.classList.add('active');
         btn.addEventListener('click', () => {
           state.textureKey = tex.key;
@@ -318,7 +422,7 @@ export function initTextureCard({ onChange }) {
   // ===== 分组控件切换 =====
   function syncGroupUI() {
     const group = themeOf(state.theme).group;
-    motifWall.hidden = group === 'solid';
+    motifWell.hidden = group === 'solid';
     paletteRow.hidden = group !== 'pattern';
     colorPicker.hidden = group !== 'solid';
     if (group === 'solid') requestAnimationFrame(sizeAndDrawPicker);
